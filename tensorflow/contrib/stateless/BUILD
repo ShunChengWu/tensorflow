@@ -21,8 +21,6 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":stateless_random_ops",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:util",
     ],
 )
 

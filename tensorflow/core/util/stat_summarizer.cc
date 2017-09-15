@@ -22,9 +22,6 @@ limitations under the License.
 #include <string>
 
 #include "tensorflow/core/framework/step_stats.pb.h"
-#include "tensorflow/core/framework/tensor_description.pb.h"
-#include "tensorflow/core/framework/tensor_shape.pb.h"
-#include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/types.h"
@@ -37,14 +34,6 @@ StatSummarizer::StatSummarizer(const StatSummarizerOptions& options)
 StatSummarizer::StatSummarizer(const tensorflow::GraphDef& tensorflow_graph)
     : StatSummarizer(StatSummarizerOptions()) {}
 
-StatSummarizer::~StatSummarizer() {}
-
-void StatSummarizer::Reset() {
-  run_total_us_.Reset();
-  memory_.Reset();
-  details_.clear();
-}
-
 void StatSummarizer::Validate(const Detail* detail,
                               const NodeExecStats& ns) const {
   if (detail->outputs.size() != ns.output_size()) {
@@ -55,8 +44,9 @@ void StatSummarizer::Validate(const Detail* detail,
     for (const auto& output : ns.output()) {
       const int32 slot = output.slot();
       if ((slot < 0) || (slot >= ns.output_size())) {
-        // This is not a hard error for Switch ops, so just pass.
-        continue;
+        LOG(ERROR) << "Bad output slot '" << slot << "' for '" << ns.node_name()
+                   << "'";
+        return;
       }
       const auto& stored = detail->outputs[slot];
       const auto& current = output.tensor_description();
@@ -133,46 +123,10 @@ void StatSummarizer::ProcessStepStats(const StepStats& step_stats) {
   int node_num = 0;
   for (const auto& ds : step_stats.dev_stats()) {
     for (const auto& ns : ds.node_stats()) {
-      // NOTE(blackhc): To better support GPUs:
-      // GPU kernels are duplicated both in /stream:all and their
-      // /stream:$index. GPU memcpys are duplicated both in /memcpy and their
-      // /stream:$index. So only keep /stream:all and /memcpy and ignore all
-      // /stream:$index to only count GPU executions once.
-      if (ds.device().find("/stream") != std::string::npos &&
-          ds.device().find("/stream:all") == std::string::npos) {
-        continue;
-      }
-
-      std::string name = ns.node_name();
-      std::string op_type = "<>";
-      // NOTE(blackhc): we have to ensure that all keys into the detail map
-      // are unique, so we add [Kernel] or [MemCpy] as a suffix to the name.
-      // To make the node type summary work better, we prefix "gpu:" to
-      // the op type when the info is from a /gpu/stream or /memcpy channel.
-      if (ds.device().find("/stream") != std::string::npos) {
-        // node_name: name ":" opType
-        auto parts = str_util::Split(ns.node_name(), ':');
-        if (parts.size() == 2) {
-          name = parts[0] + " [Kernel]";
-          op_type = "gpu:" + parts[1];
-        }
-      } else if (ds.device().find("/memcpy") != std::string::npos) {
-        // node_name: name (":" opType)? ":" memCpyType
-        auto parts = str_util::Split(ns.node_name(), ':');
-        if (parts.size() == 2 || parts.size() == 3) {
-          name = parts.front() + " [MemCpy]";
-          // We don't care about the actual op type (it might not be available
-          // for edge_ memcpys). We only care that it's a memcpy for now.
-          op_type = "gpu:" + parts.back();
-        }
-      } else {
-        op_type = OpType(ds, ns);
-      }
-
       ++node_num;
       const int64 curr_time = ns.all_end_rel_micros();
       curr_total_us += curr_time;
-      auto result = details_.emplace(name, Detail());
+      auto result = details_.emplace(ns.node_name(), Detail());
       Detail* detail = &(result.first->second);
 
       detail->start_us.UpdateStat(ns.all_start_micros() - first_node_start_us);
@@ -180,8 +134,8 @@ void StatSummarizer::ProcessStepStats(const StepStats& step_stats) {
 
       // If this is the first pass, initialize some values.
       if (result.second) {
-        detail->name = name;
-        detail->type = op_type;
+        detail->name = ns.node_name();
+        detail->type = OpType(ds, ns);
 
         detail->run_order = node_num;
 
@@ -189,13 +143,12 @@ void StatSummarizer::ProcessStepStats(const StepStats& step_stats) {
         for (const auto& output : ns.output()) {
           const int32 slot = output.slot();
           if ((slot < 0) || (slot >= ns.output_size())) {
-            // This is not a hard error for Switch ops, so just pass.
+            LOG(ERROR) << "Bad output slot '" << slot << "' for '"
+                       << ns.node_name() << "'";
             continue;
           }
           detail->outputs[slot] = output.tensor_description();
         }
-
-        detail->times_called = 0;
       }
 
       int64 curr_node_mem = 0;
@@ -205,8 +158,6 @@ void StatSummarizer::ProcessStepStats(const StepStats& step_stats) {
       }
       detail->mem_used.UpdateStat(curr_node_mem);
       mem_total += curr_node_mem;
-
-      ++detail->times_called;
 
       Validate(detail, ns);
     }
@@ -249,7 +200,6 @@ std::string StatSummarizer::HeaderString(const string& title) const {
   InitField(stream, 8) << "[%]";
   InitField(stream, 8) << "[cdf%]";
   InitField(stream, 10) << "[mem KB]";
-  InitField(stream, 9) << "[times called]";
   stream << "\t"
          << "[Name]";
   return stream.str();
@@ -263,7 +213,6 @@ std::string StatSummarizer::ColumnString(const Detail& detail,
   const double avg_time_ms = detail.rel_end_us.avg() / 1000.0;
   const double percentage = detail.rel_end_us.sum() * 100.0 / stat.sum();
   const double cdf_percentage = (cumulative_stat_on_node * 100.0f) / stat.sum();
-  const int64 times_called = detail.times_called / num_runs();
 
   std::stringstream stream;
   InitField(stream, 24) << detail.type;
@@ -273,7 +222,6 @@ std::string StatSummarizer::ColumnString(const Detail& detail,
   InitField(stream, 7) << percentage << "%";
   InitField(stream, 7) << cdf_percentage << "%";
   InitField(stream, 10) << detail.mem_used.newest() / 1000.0;
-  InitField(stream, 9) << times_called;
   stream << "\t" << detail.name;
 
   return stream.str();
@@ -325,7 +273,6 @@ void StatSummarizer::ComputeStatsByType(
     std::map<string, int64>* node_type_map_count,
     std::map<string, int64>* node_type_map_time,
     std::map<string, int64>* node_type_map_memory,
-    std::map<string, int64>* node_type_map_times_called,
     int64* accumulated_us) const {
   int64 run_count = run_total_us_.count();
 
@@ -344,7 +291,6 @@ void StatSummarizer::ComputeStatsByType(
     (*node_type_map_count)[node_type] += 1;
     (*node_type_map_time)[node_type] += curr_time_val;
     (*node_type_map_memory)[node_type] += curr_memory_val;
-    (*node_type_map_times_called)[node_type] += detail.times_called / run_count;
   }
 }
 
@@ -360,12 +306,10 @@ std::string StatSummarizer::GetStatsByNodeType() const {
   std::map<string, int64> node_type_map_count;
   std::map<string, int64> node_type_map_time;
   std::map<string, int64> node_type_map_memory;
-  std::map<string, int64> node_type_map_times_called;
   int64 accumulated_us = 0;
 
   ComputeStatsByType(&node_type_map_count, &node_type_map_time,
-                     &node_type_map_memory, &node_type_map_times_called,
-                     &accumulated_us);
+                     &node_type_map_memory, &accumulated_us);
 
   // Sort them.
   std::priority_queue<std::pair<int64, std::pair<string, int64>>> timings;
@@ -381,7 +325,6 @@ std::string StatSummarizer::GetStatsByNodeType() const {
   InitField(stream, 11) << "[avg %]";
   InitField(stream, 11) << "[cdf %]";
   InitField(stream, 10) << "[mem KB]";
-  InitField(stream, 10) << "[times called]";
   stream << std::endl;
 
   float cdf = 0.0f;
@@ -405,7 +348,6 @@ std::string StatSummarizer::GetStatsByNodeType() const {
     InitField(stream, 10) << percentage << "%";
     InitField(stream, 10) << cdf << "%";
     InitField(stream, 10) << memory;
-    InitField(stream, 9) << node_type_map_times_called[node_type];
     stream << std::endl;
   }
   stream << std::endl;

@@ -19,10 +19,7 @@ limitations under the License.
 
 #include "tensorflow/core/kernels/sparse_matmul_op.h"
 
-#include <map>
-#include <memory>
 #include <vector>
-
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/framework/bfloat16.h"
@@ -45,43 +42,26 @@ limitations under the License.
 #endif
 
 namespace tensorflow {
+
 namespace {
 
 using Eigen::operator==;
+typedef Eigen::Tensor<float, 2, Eigen::RowMajor> Matrix;
+typedef Eigen::DSizes<Eigen::DenseIndex, 2> DSizes;
+typedef Eigen::TensorMap<Eigen::Tensor<const float, 2, Eigen::RowMajor>,
+                         Eigen::Aligned>
+    ConstMatrixMap;
+typedef Eigen::TensorMap<Eigen::Tensor<float, 2, Eigen::RowMajor>,
+                         Eigen::Aligned>
+    MatrixMap;
 
-template <typename T>
-using BasicMatrix = Eigen::Tensor<T, 2, Eigen::RowMajor>;
-
-template <typename T>
-using BasicMatrixMap =
-    Eigen::TensorMap<Eigen::Tensor<T, 2, Eigen::RowMajor>, Eigen::Aligned>;
-
-using Matrix = BasicMatrix<float>;
-using MatrixMap = BasicMatrixMap<float>;
-using CPUDevice = Eigen::ThreadPoolDevice;
-using DSizes = Eigen::DSizes<Eigen::DenseIndex, 2>;
-
-// Two commonly used static dsizes. We use Eigen::type2index to allow as much
-// compile time optimization as possible.
-#ifdef EIGEN_HAS_INDEX_LIST
-inline Eigen::IndexList<Eigen::type2index<0>, Eigen::type2index<0>>
-dsizes_00() {
-  return Eigen::IndexList<Eigen::type2index<0>, Eigen::type2index<0>>();
-}
-inline Eigen::IndexList<Eigen::type2index<1>, Eigen::type2index<0>>
-dsizes_10() {
-  return Eigen::IndexList<Eigen::type2index<1>, Eigen::type2index<0>>();
-}
-#else
-inline DSizes dsizes_00() { return DSizes(0, 0); }
-inline DSizes dsizes_10() { return DSizes(1, 0); }
-#endif
+typedef Eigen::ThreadPoolDevice CPUDevice;
 
 // Blocksizes
 // TODO(agarwal): compute these sizes based on cache sizes.
-const int K = 64;
-const int M = 64;
-const int N = 128;
+static const int K = 64;
+static const int M = 64;
+static const int N = 128;
 
 // This stores a sparse representation of a slice of a matrix with size
 // (num_rows, num_cols). The slice is represented as a series of blocks of size
@@ -106,7 +86,9 @@ const int N = 128;
 // index_offset.
 template <typename T>
 struct SparseSlice {
-  using ConstMatrixMap = BasicMatrixMap<const T>;
+  typedef Eigen::TensorMap<Eigen::Tensor<const T, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      ConstMatrixMap;
 
  public:
   // Indices of three elements on the same row.
@@ -262,8 +244,8 @@ void SparseSlice<T>::Clear() {
   data.clear();
 }
 
-using Packet = Eigen::internal::packet_traits<float>::type;
-const int kNumOperands = (sizeof(Packet) / sizeof(float));
+typedef Eigen::internal::packet_traits<float>::type Packet;
+static const int kNumOperands = (sizeof(Packet) / sizeof(float));
 #define LOAD(x) Eigen::internal::pload<Packet>(x);
 #define EXPAND_BFLOAT_L(x, y) \
   const auto y = Eigen::internal::pexpand_bf16_l<Packet>(x);
@@ -625,8 +607,8 @@ inline void GEPP(
   }
   for (const auto* left_slice : left_slices) {
     const auto& left = *left_slice;
-    const auto* data3 = (!left.data3.empty()) ? &left.data3[0] : nullptr;
-    const auto* data = (!left.data.empty()) ? &left.data[0] : nullptr;
+    const auto* data3 = (left.data3.size() > 0) ? &left.data3[0] : nullptr;
+    const auto* data = (left.data.size() > 0) ? &left.data[0] : nullptr;
     const int num_blocks = left.index3_offset.size();
     int begin3 = 0;
     int begin = 0;
@@ -770,11 +752,17 @@ inline void GEPP(
 
 template <typename TL, typename TR>
 class SparseMatMul {
-  using MatrixL = BasicMatrix<TL>;
-  using MatrixR = BasicMatrix<TR>;
-  using ConstMatrixMapL = BasicMatrixMap<const TL>;
-  using ConstMatrixMapR = BasicMatrixMap<const TR>;
-  using MatrixMapR = BasicMatrixMap<TR>;
+  typedef Eigen::Tensor<TL, 2, Eigen::RowMajor> MatrixL;
+  typedef Eigen::Tensor<TR, 2, Eigen::RowMajor> MatrixR;
+  typedef Eigen::TensorMap<Eigen::Tensor<const TL, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      ConstMatrixMapL;
+  typedef Eigen::TensorMap<Eigen::Tensor<const TR, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      ConstMatrixMapR;
+  typedef Eigen::TensorMap<Eigen::Tensor<TR, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      MatrixMapR;
 
  public:
   // Not used; added to match interface of LibxsmmSparseMatMul
@@ -804,7 +792,7 @@ class SparseMatMul {
   // "slice_num_cols", each grid element is converted into a SparseSlice and
   // stored in mat_slices. "slice_block_size" is used to perform further column
   // blocking of each slice.
-  static inline std::unique_ptr<BlockingCounter> CreateSparseSlices(
+  static inline BlockingCounter* CreateSparseSlices(
       const ConstMatrixMapL& mat, bool transpose, int slice_num_rows,
       int slice_block_size, int slice_num_cols,
       std::vector<std::vector<SparseSlice<TL>*>>* mat_slices,
@@ -814,7 +802,7 @@ class SparseMatMul {
   // columns, and concatenates the pieces one after the other in "buffer". It
   // returns the list of the pieces in "slices". It returns a BlockingCounter
   // which should be used to wait for the shuffle operations to complete.
-  static inline std::unique_ptr<BlockingCounter> CreateDenseSlices(
+  static inline BlockingCounter* CreateDenseSlices(
       const ConstMatrixMapR& mat, int row_start, int num_rows, int col_start,
       int num_cols, const DeviceBase::CpuWorkerThreads* thread_pool,
       MatrixR* buffer, std::vector<ConstMatrixMapR*>* slices);
@@ -851,11 +839,17 @@ class SparseMatMul {
 #ifdef TENSORFLOW_USE_LIBXSMM
 template <typename TL, typename TR>
 class LibxsmmSparseMatMul {
-  using MatrixL = BasicMatrix<TL>;
-  using MatrixR = BasicMatrix<TR>;
-  using ConstMatrixMapL = BasicMatrixMap<const TL>;
-  using ConstMatrixMapR = BasicMatrixMap<const TR>;
-  using MatrixMapR = BasicMatrixMap<TR>;
+  typedef Eigen::Tensor<TL, 2, Eigen::RowMajor> MatrixL;
+  typedef Eigen::Tensor<TR, 2, Eigen::RowMajor> MatrixR;
+  typedef Eigen::TensorMap<Eigen::Tensor<const TL, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      ConstMatrixMapL;
+  typedef Eigen::TensorMap<Eigen::Tensor<const TR, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      ConstMatrixMapR;
+  typedef Eigen::TensorMap<Eigen::Tensor<TR, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      MatrixMapR;
 
  public:
   // This structure contains a set of libxsmm kernels for sizes that have been
@@ -945,8 +939,10 @@ class LibxsmmSparseMatMul {
 template <typename TL, typename TR,
           template <typename TL2, typename TR2> class DoMatMul>
 class SparseMatMulOp : public OpKernel {
-  using MatrixR = BasicMatrix<TR>;
-  using ConstMatrixMapR = BasicMatrixMap<const TR>;
+  typedef Eigen::Tensor<TR, 2, Eigen::RowMajor> MatrixR;
+  typedef Eigen::TensorMap<Eigen::Tensor<const TR, 2, Eigen::RowMajor>,
+                           Eigen::Aligned>
+      ConstMatrixMapR;
 
  public:
   explicit SparseMatMulOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
@@ -1036,7 +1032,7 @@ class SparseMatMulOp : public OpKernel {
           new Tensor(right->dtype(),
                      TensorShape({right->dim_size(1), right->dim_size(0)})));
 
-      const auto perm = dsizes_10();
+      Eigen::array<int, 2> perm({1, 0});
       if (transpose_output) {
         right_tr->matrix<TL>().device(ctx->template eigen_device<CPUDevice>()) =
             right->matrix<TL>().shuffle(perm);
@@ -1080,7 +1076,7 @@ inline void SparseMatMul<TL, TR>::ComputeOutputBlock(
     const typename SparseMatMul<TL, TR>::ConstMatrixMapR& right, int num_cols,
     int output_row_offset, int output_col_offset, bool assign,
     bool transpose_output, MatrixMap* output) {
-  const auto perm = dsizes_10();
+  static const Eigen::array<int, 2> perm({1, 0});
   int num_rows = left[0]->num_rows;
   const int rhs_num_cols = right.dimension(1);
   DCHECK_LE(num_cols, rhs_num_cols);
@@ -1092,20 +1088,20 @@ inline void SparseMatMul<TL, TR>::ComputeOutputBlock(
     GEPP<TL, TR, -1>(left, right, num_cols, &out);
   }
   if (!assign) {
-    const DSizes begin(output_row_offset, output_col_offset);
-    const DSizes sizes(num_rows, num_cols);
+    const Eigen::array<int, 2> begin = {output_row_offset, output_col_offset};
+    const Eigen::array<int, 2> sizes = {num_rows, num_cols};
     if (transpose_output) {
       if (num_cols == rhs_num_cols) {
         output->shuffle(perm).slice(begin, sizes) += out;
       } else {
-        const auto zero = dsizes_00();
+        static const Eigen::array<int, 2> zero = {0, 0};
         output->shuffle(perm).slice(begin, sizes) += out.slice(zero, sizes);
       }
     } else {
       if (num_cols == rhs_num_cols) {
         output->slice(begin, sizes) += out;
       } else {
-        const auto zero = dsizes_00();
+        static const Eigen::array<int, 2> zero = {0, 0};
         output->slice(begin, sizes) += out.slice(zero, sizes);
       }
     }
@@ -1126,8 +1122,7 @@ inline void SparseMatMul<TL, TR>::ComputeOutputBlock(
 }
 
 template <typename TL, typename TR>
-inline std::unique_ptr<BlockingCounter>
-SparseMatMul<TL, TR>::CreateSparseSlices(
+inline BlockingCounter* SparseMatMul<TL, TR>::CreateSparseSlices(
     const typename SparseMatMul<TL, TR>::ConstMatrixMapL& mat, bool transpose,
     int slice_num_rows, int slice_block_size, int slice_num_cols,
     std::vector<std::vector<SparseSlice<TL>*>>* mat_slices,
@@ -1175,7 +1170,7 @@ SparseMatMul<TL, TR>::CreateSparseSlices(
           [=]() { work(sparse_slice, slice, slice_num_cols * j); });
     }
   }
-  return std::unique_ptr<BlockingCounter>(counter);
+  return counter;
 }
 #define LOAD(x) Eigen::internal::ploadu<Packet>((x));
 #define INTERLEAVE(x) Eigen::internal::pinterleave4x64<Packet>(x);
@@ -1291,13 +1286,13 @@ inline void SparseMatMul<TL, TR>::SliceMatrix(
 }
 
 template <typename TL, typename TR>
-inline std::unique_ptr<BlockingCounter> SparseMatMul<TL, TR>::CreateDenseSlices(
+inline BlockingCounter* SparseMatMul<TL, TR>::CreateDenseSlices(
     const typename SparseMatMul<TL, TR>::ConstMatrixMapR& mat, int row_start,
     int num_rows, int col_start, int num_cols,
     const DeviceBase::CpuWorkerThreads* thread_pool, MatrixR* buffer,
     std::vector<typename SparseMatMul<TL, TR>::ConstMatrixMapR*>* slices) {
-  std::unique_ptr<BlockingCounter> shuffle_counter(ShuffleMatrix(
-      mat, row_start, num_rows, col_start, num_cols, N, thread_pool, buffer));
+  BlockingCounter* shuffle_counter = ShuffleMatrix(
+      mat, row_start, num_rows, col_start, num_cols, N, thread_pool, buffer);
   const int num_slices = (num_cols + N - 1) / N;
   SliceMatrix(*buffer, num_rows, num_slices, slices);
   return shuffle_counter;
@@ -1411,6 +1406,34 @@ void wrapper_libxsmm_spmdm_compute_generic_thread(
                                            block_id, tid, nthreads);
 }
 
+class PinnedToCurrentCPU {
+  bool valid;
+  cpu_set_t old_cpu_set;
+
+ public:
+  PinnedToCurrentCPU() : valid(false) {
+    int ret = 0;
+    ret = sched_getaffinity(0, sizeof(cpu_set_t), &old_cpu_set);
+    if (ret != 0) {
+      VLOG(WARNING) << "sched_getaffinity";
+      return;
+    }
+    valid = true;
+    cpu_set_t new_cpu_set;
+    CPU_ZERO(&new_cpu_set);
+    CPU_SET(sched_getcpu(), &new_cpu_set);
+    ret = sched_setaffinity(0, sizeof(cpu_set_t), &new_cpu_set);
+    if (ret != 0) {
+      VLOG(WARNING) << "sched_setaffinity";
+    }
+  }
+  ~PinnedToCurrentCPU() {
+    if (!valid) return;
+    // No reason to trap errors here
+    sched_setaffinity(0, sizeof(cpu_set_t), &old_cpu_set);
+  }
+};
+
 template <typename TL, typename TR>
 inline void LibxsmmSparseMatMul<TL, TR>::Compute(
     typename LibxsmmSparseMatMul<TL, TR>::TensorInfoCache* cache,
@@ -1455,6 +1478,7 @@ inline void LibxsmmSparseMatMul<TL, TR>::Compute(
   std::atomic<int> cur_create_block_number;
   cur_create_block_number.store(0);
   do_on_all_threads(thread_pool, [&](int i) {
+    PinnedToCurrentCPU pin;
     while (true) {
       int work_item = cur_create_block_number.fetch_add(1);
       if (work_item >= total_num_creation_blocks) break;
@@ -1470,6 +1494,7 @@ inline void LibxsmmSparseMatMul<TL, TR>::Compute(
   std::atomic<int> cur_mult_block_number;
   cur_mult_block_number.store(0);
   do_on_all_threads(thread_pool, [&](int i) {
+    PinnedToCurrentCPU pin;
     while (true) {
       int work_item = cur_mult_block_number.fetch_add(1);
       if (work_item >= total_num_mult_blocks) break;
@@ -1529,9 +1554,10 @@ inline void SparseMatMul<TL, TR>::Compute(
                     &JB, &IB);
   // Slice the left matrix
   std::vector<std::vector<SparseSlice<TL>*>> left_slices;
-  std::unique_ptr<BlockingCounter> sparse_slice_counter =
+  std::unique_ptr<BlockingCounter> sparse_slice_counter;
+  sparse_slice_counter.reset(
       CreateSparseSlices(ConstMatrixMapL(left.data(), left.dimensions()),
-                         transpose_left, M, K, KL, &left_slices, thread_pool);
+                         transpose_left, M, K, KL, &left_slices, thread_pool));
   const int num_left_slices = left_slices.size();
 
   const int right_dim0 = right.dimension(0);
@@ -1557,9 +1583,9 @@ inline void SparseMatMul<TL, TR>::Compute(
     for (int kb = 0; kb < num_k_blocks; ++kb) {
       const int right_num_rows =
           std::min(KR, static_cast<int>(right_dim0 - KR * kb));
-      dense_slice_counter = CreateDenseSlices(
+      dense_slice_counter.reset(CreateDenseSlices(
           right, kb * KR, right_num_rows, nb * NR, right_num_cols, thread_pool,
-          &buffer, &right_slices);
+          &buffer, &right_slices));
       const int num_right_slices = right_slices.size();
       tasks.reserve(num_left_slices * num_right_slices);
       for (int j_outer = 0; j_outer < num_right_slices; j_outer += JB) {

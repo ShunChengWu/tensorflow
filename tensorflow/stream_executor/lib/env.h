@@ -26,7 +26,9 @@ namespace gputools {
 namespace port {
 
 using tensorflow::Env;
+using tensorflow::ReadFileToString;
 using tensorflow::Thread;
+using tensorflow::WriteStringToFile;
 
 inline Status FileExists(const string& filename) {
   return Env::Default()->FileExists(filename);

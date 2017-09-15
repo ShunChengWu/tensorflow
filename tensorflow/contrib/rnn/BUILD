@@ -26,9 +26,7 @@ load(
 
 tf_custom_op_py_library(
     name = "rnn_py",
-    srcs = ["__init__.py"] + glob(["python/ops/*.py"]) + [
-        "python/tools/checkpoint_convert.py",
-    ],
+    srcs = ["__init__.py"] + glob(["python/ops/*.py"]),
     dso = [
         ":python/ops/_gru_ops.so",
         ":python/ops/_lstm_ops.so",
@@ -67,7 +65,7 @@ tf_custom_op_py_library(
 
 cuda_py_tests(
     name = "rnn_cell_test",
-    size = "medium",
+    size = "small",
     srcs = ["python/kernel_tests/rnn_cell_test.py"],
     additional_deps = [
         ":rnn_py",
@@ -361,11 +359,7 @@ py_binary(
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/core:protos_all_py",
-        "//tensorflow/python:client",
-        "//tensorflow/python:framework_ops",
         "//tensorflow/python:platform",
-        "//tensorflow/python:pywrap_tensorflow",
-        "//tensorflow/python:session",
         "//tensorflow/python:training",
         "//tensorflow/python:variables",
     ],
@@ -380,9 +374,5 @@ py_test(
     deps = [
         ":checkpoint_convert",
         "//tensorflow/python:client_testlib",
-        "//tensorflow/python:framework_ops",
-        "//tensorflow/python:session",
-        "//tensorflow/python:training",
-        "//tensorflow/python:variables",
     ],
 )

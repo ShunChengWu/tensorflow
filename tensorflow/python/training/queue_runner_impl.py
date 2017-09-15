@@ -316,17 +316,11 @@ class QueueRunner(object):
       self._runs_per_session[sess] = len(self._enqueue_ops)
       self._exceptions_raised = []
 
-    ret_threads = []
-    for op in self._enqueue_ops:
-      name = "QueueRunnerThread-{}-{}".format(self.name, op.name)
-      ret_threads.append(threading.Thread(target=self._run,
-                                          args=(sess, op, coord),
-                                          name=name))
+    ret_threads = [threading.Thread(target=self._run, args=(sess, op, coord))
+                   for op in self._enqueue_ops]
     if coord:
-      name = "QueueRunnerThread-{}-close_on_stop".format(self.name)
       ret_threads.append(threading.Thread(target=self._close_on_stop,
-                                          args=(sess, self._cancel_op, coord),
-                                          name=name))
+                                          args=(sess, self._cancel_op, coord)))
     for t in ret_threads:
       if coord:
         coord.register_thread(t)

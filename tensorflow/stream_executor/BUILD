@@ -46,10 +46,6 @@ cc_library(
             exclude = ["cuda/cuda_platform_id.cc"],
         ),
     ),
-    copts = select({
-        "//tensorflow:windows": ["/DNOGDI"],
-        "//conditions:default": [],
-    }),
     linkopts = select({
         "//tensorflow:freebsd": [],
         "//conditions:default": ["-ldl"],

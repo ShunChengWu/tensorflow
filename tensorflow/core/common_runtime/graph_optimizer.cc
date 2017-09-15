@@ -33,11 +33,8 @@ GraphOptimizer::GraphOptimizer(const OptimizerOptions& opts) : opts_(opts) {
 
 GraphOptimizer::~GraphOptimizer() {}
 
-void GraphOptimizer::Optimize(
-    FunctionLibraryRuntime* runtime, Env* env, Device* device,
-    std::unique_ptr<Graph>* graph,
-    const std::unordered_map<string, std::vector<PartialTensorShape>>*
-        shape_map) {
+void GraphOptimizer::Optimize(FunctionLibraryRuntime* runtime, Env* env,
+                              Device* device, std::unique_ptr<Graph>* graph) {
   Graph* g = graph->get();
   DumpGraph("Initial", g);
 
@@ -60,7 +57,6 @@ void GraphOptimizer::Optimize(
 
     if (opts_.do_constant_folding()) {
       ConstantFoldingOptions cf_opts;
-      cf_opts.shape_map = shape_map;
       bool was_mutated;
       ConstantFold(cf_opts, runtime, env, device, g, &was_mutated)
           .IgnoreError();

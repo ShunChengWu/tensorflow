@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 # ==============================================================================
-"""A visitor class that generates protobufs for each python object."""
+"""A visitor class that generates protobufs for each pyton object."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -56,8 +56,7 @@ def _SanitizedArgSpec(obj):
     sanitized_defaults = []
     for val in unsanitized_arg_spec.defaults:
       str_val = str(val)
-      # Sanitize argspecs that have hex code in them.
-      if ' at 0x' in str_val:
+      if ' object at 0x' in str_val:
         sanitized_defaults.append('%s instance>' % str_val.split(' at ')[0])
       else:
         sanitized_defaults.append(str_val)

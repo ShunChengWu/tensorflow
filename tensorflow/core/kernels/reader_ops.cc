@@ -50,7 +50,8 @@ class ReaderVerbAsyncOpKernel : public AsyncOpKernel {
       : AsyncOpKernel(context),
         thread_pool_(new thread::ThreadPool(
             context->env(), ThreadOptions(),
-            strings::StrCat("reader_thread_", SanitizeThreadSuffix(name())),
+            strings::StrCat("reader_thread_",
+                            SanitizeThreadSuffix(def().name())),
             1 /* num_threads */, false /* low_latency_hint */)) {}
 
   void ComputeAsync(OpKernelContext* context, DoneCallback done) override {

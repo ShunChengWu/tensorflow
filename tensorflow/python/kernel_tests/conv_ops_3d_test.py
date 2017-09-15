@@ -330,7 +330,7 @@ class Conv3DTest(test.TestCase):
 
     if test.is_gpu_available() and use_gpu:
       data_type = dtypes.float32
-      # TODO(mjanusz): Modify gradient_checker to also provide max relative
+      # TOOD(mjanusz): Modify gradient_checker to also provide max relative
       # error and synchronize the tolerance levels between the tests for forward
       # and backward computations.
       if test.is_gpu_available():

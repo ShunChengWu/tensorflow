@@ -41,6 +41,7 @@
 
 namespace tensorflow {
 
+using shape_inference::DimensionHandle;
 using shape_inference::InferenceContext;
 using shape_inference::ShapeHandle;
 

@@ -56,7 +56,7 @@ class PlaceholderOp : public OpKernel {
   void Compute(OpKernelContext* ctx) override;
 
  private:
-  PartialTensorShape expected_shape_;
+  TensorShape expected_shape_;
 };
 
 }  // namespace tensorflow

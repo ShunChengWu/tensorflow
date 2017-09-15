@@ -54,8 +54,6 @@ class GenericTransferManager : public TransferManager {
 
   Status TransferLiteralToInfeed(perftools::gputools::StreamExecutor* executor,
                                  const Literal& literal) override;
-  Status TransferBufferToInfeed(perftools::gputools::StreamExecutor* executor,
-                                int64 size, const void* source) override;
 
   Status TransferLiteralFromOutfeed(
       perftools::gputools::StreamExecutor* executor, const Shape& literal_shape,

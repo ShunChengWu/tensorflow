@@ -20,7 +20,6 @@ from __future__ import print_function
 
 import six
 
-from tensorflow.python import pywrap_tensorflow
 from tensorflow.python.ops import io_ops
 from tensorflow.python.ops import state_ops
 from tensorflow.python.ops import variable_scope as vs
@@ -28,7 +27,7 @@ from tensorflow.python.ops import variables
 from tensorflow.python.platform import gfile
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import saver
-
+from tensorflow.python.training import training as train
 
 __all__ = [
     "load_checkpoint", "load_variable", "list_variables", "init_from_checkpoint"
@@ -56,7 +55,7 @@ def load_checkpoint(ckpt_dir_or_file):
   if filename is None:
     raise ValueError("Couldn't find 'checkpoint' file or checkpoints in "
                      "given directory %s" % ckpt_dir_or_file)
-  return pywrap_tensorflow.NewCheckpointReader(filename)
+  return train.NewCheckpointReader(filename)
 
 
 def load_variable(ckpt_dir_or_file, name):

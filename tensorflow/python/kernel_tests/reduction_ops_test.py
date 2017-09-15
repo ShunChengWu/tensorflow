@@ -175,60 +175,10 @@ class SumReductionTest(BaseReductionTest):
       np_arr = self._makeIncremental((2,) * rank, dtypes.int32)
       self._compareAllAxes(np_arr)
 
-  def testFloat16(self):
-    for rank in range(1, _MAX_RANK + 1):
-      np_arr = self._makeIncremental((2,) * rank, dtypes.float16)
-      self._compareAllAxes(np_arr)
-
-    # test that mean doesn't overflow
-    # only on GPU, since it has the more accurate implementation
-    if not test.is_gpu_available():
-      return
-
-    arr = np.ones([68000], dtype=np.float16)
-
-    with self.test_session(graph=ops.Graph(), use_gpu=True) as sess:
-      tf_arr = array_ops.constant(arr)
-      tf_mean = math_ops.reduce_mean(tf_arr, 0, False)
-      tf_out_mean = sess.run(tf_mean)
-    self.assertAllClose(tf_out_mean, 1.)
-
   def testFloat32(self):
     for rank in range(1, _MAX_RANK + 1):
       np_arr = self._makeIncremental((2,) * rank, dtypes.float32)
       self._compareAllAxes(np_arr)
-
-    for _ in range(10):
-      size_x = int(2**np.random.uniform(0, 15))
-      size_y = int(2**np.random.uniform(0, 15))
-
-      if size_x * size_y > 1e7:
-        size_y = int(1e7 / size_x)
-
-      arr = np.ones([size_x, size_y], dtype=np.float32)
-      col_sum = np.sum(arr, axis=0)
-      row_sum = np.sum(arr, axis=1)
-
-      with self.test_session(graph=ops.Graph(), use_gpu=True) as sess:
-        tf_row_sum = self._tf_reduce(arr, 1, False)
-        tf_col_sum = self._tf_reduce(arr, 0, False)
-        tf_out_row, tf_out_col = sess.run([tf_row_sum, tf_col_sum])
-      self.assertAllClose(col_sum, tf_out_col)
-      self.assertAllClose(row_sum, tf_out_row)
-
-    for size_x in [1, 3, 16, 33]:
-      for size_y in [1, 3, 16, 33]:
-        for size_z in [1, 3, 16, 33]:
-          arr = np.ones([size_x, size_y, size_z], dtype=np.float32)
-          sum_y = np.sum(arr, axis=1)
-          sum_xz = np.sum(arr, axis=(0, 2))
-
-          with self.test_session(graph=ops.Graph(), use_gpu=True) as sess:
-            tf_sum_xz = self._tf_reduce(arr, [0, 2], False)
-            tf_sum_y = self._tf_reduce(arr, 1, False)
-            tf_out_sum_xz, tf_out_sum_y = sess.run([tf_sum_xz, tf_sum_y])
-          self.assertAllClose(sum_y, tf_out_sum_y)
-          self.assertAllClose(sum_xz, tf_out_sum_xz)
 
   def testFloat64(self):
     for rank in range(1, _MAX_RANK + 1):
@@ -541,7 +491,7 @@ class MinReductionTest(test.TestCase):
   def testFloatReduce3D(self):
     # Create a 3D array of floats and reduce across all possible
     # dimensions
-    np_arr = np.arange(1, 31).reshape([2, 3, 5]).astype(np.float32)
+    np_arr = np.arange(0, 30).reshape([2, 3, 5]).astype(np.float32)
     self._compareAll(np_arr, None)
     self._compareAll(np_arr, [])
     self._compareAll(np_arr, [0])
@@ -555,7 +505,7 @@ class MinReductionTest(test.TestCase):
   def testDoubleReduce3D(self):
     # Create a 3D array of doubles and reduce across all possible
     # dimensions
-    np_arr = np.arange(1, 31).reshape([2, 3, 5]).astype(np.float64)
+    np_arr = np.arange(0, 30).reshape([2, 3, 5]).astype(np.float64)
     self._compareAll(np_arr, None)
     self._compareAll(np_arr, [])
     self._compareAll(np_arr, [0])
@@ -647,7 +597,7 @@ class MaxReductionTest(test.TestCase):
   def testFloatReduce3D(self):
     # Create a 3D array of floats and reduce across all possible
     # dimensions
-    np_arr = np.arange(-31, -1).reshape([2, 3, 5]).astype(np.float32)
+    np_arr = np.arange(0, 30).reshape([2, 3, 5]).astype(np.float32)
     self._compareAll(np_arr, None)
     self._compareAll(np_arr, [])
     self._compareAll(np_arr, [0])
@@ -661,7 +611,7 @@ class MaxReductionTest(test.TestCase):
   def testDoubleReduce3D(self):
     # Create a 3D array of doubles and reduce across all possible
     # dimensions
-    np_arr = np.arange(-31, -1).reshape([2, 3, 5]).astype(np.float64)
+    np_arr = np.arange(0, 30).reshape([2, 3, 5]).astype(np.float64)
     self._compareAll(np_arr, None)
     self._compareAll(np_arr, [])
     self._compareAll(np_arr, [0])
@@ -674,7 +624,7 @@ class MaxReductionTest(test.TestCase):
 
   def testGradient(self):
     s = [2, 3, 4, 2]
-    x = np.arange(-49.0, -1.0).reshape(s).astype(np.float64)
+    x = np.arange(1.0, 49.0).reshape(s).astype(np.float64)
     with self.test_session():
       t = ops.convert_to_tensor(x)
       su = math_ops.reduce_max(t, [1, 2])
@@ -684,7 +634,7 @@ class MaxReductionTest(test.TestCase):
 
   def testGradient2(self):
     s = [2, 3, 4, 2]
-    x = np.arange(-49.0, -1.0).reshape(s).astype(np.float64)
+    x = np.arange(1.0, 49.0).reshape(s).astype(np.float64)
     with self.test_session():
       t = ops.convert_to_tensor(x)
       su = math_ops.reduce_max(t, [1])
@@ -694,7 +644,7 @@ class MaxReductionTest(test.TestCase):
 
   def testGradient3(self):
     s = [2, 3, 4, 2]
-    x = np.arange(-49.0, -1.0).reshape(s).astype(np.float64)
+    x = np.arange(1.0, 49.0).reshape(s).astype(np.float64)
     with self.test_session():
       t = ops.convert_to_tensor(x)
       su = math_ops.reduce_max(t, [2])
@@ -704,7 +654,7 @@ class MaxReductionTest(test.TestCase):
 
   def testGradient4(self):
     s = [2, 3, 4, 2]
-    x = np.arange(-49.0, -1.0).reshape(s).astype(np.float64)
+    x = np.arange(1.0, 49.0).reshape(s).astype(np.float64)
     with self.test_session():
       t = ops.convert_to_tensor(x)
       su = math_ops.reduce_max(t)

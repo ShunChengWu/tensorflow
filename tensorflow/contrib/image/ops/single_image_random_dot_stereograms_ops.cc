@@ -19,6 +19,8 @@ limitations under the License.
 
 namespace tensorflow {
 
+using shape_inference::InferenceContext;
+
 REGISTER_OP("SingleImageRandomDotStereograms")
     .Attr("T: {double,float,int64,int32}")
     .Input("depth_values: T")

@@ -264,7 +264,7 @@ class TestFileSystem : public NullFileSystem {
  public:
   // Only allow for a single root directory.
   Status IsDirectory(const string& dirname) override {
-    if (dirname == "." || dirname.empty()) {
+    if (dirname == "." || dirname == "") {
       return Status::OK();
     }
     return Status(tensorflow::error::FAILED_PRECONDITION, "Not a dir");
@@ -272,7 +272,7 @@ class TestFileSystem : public NullFileSystem {
 
   // Simulating a FS with a root dir and a single file underneath it.
   Status GetChildren(const string& dir, std::vector<string>* result) override {
-    if (dir == "." || dir.empty()) {
+    if (dir == "." || dir == "") {
       result->push_back("test");
     }
     return Status::OK();

@@ -23,17 +23,17 @@ namespace gputools {
 namespace dnn {
 
 bool DnnSupport::GetConvolveAlgorithms(
-    bool with_winograd_nonfused, std::vector<AlgorithmType>* out_algorithms) {
+    std::vector<AlgorithmType>* out_algorithms) {
   return false;
 }
 
 bool DnnSupport::GetConvolveBackwardDataAlgorithms(
-    bool with_winograd_nonfused, std::vector<AlgorithmType>* out_algorithms) {
+    std::vector<AlgorithmType>* out_algorithms) {
   return false;
 }
 
 bool DnnSupport::GetConvolveBackwardFilterAlgorithms(
-    bool with_winograd_nonfused, std::vector<AlgorithmType>* out_algorithms) {
+    std::vector<AlgorithmType>* out_algorithms) {
   return false;
 }
 
@@ -94,8 +94,6 @@ string DataLayoutString(DataLayout layout) {
       return "BatchYXDepth";
     case DataLayout::kBatchDepthYX:
       return "BatchDepthYX";
-    case DataLayout::kBatchDepthYX4:
-      return "BatchDepthYX4";
     default:
       LOG(FATAL) << "Unknown data layout " << static_cast<int32>(layout);
   }
@@ -106,8 +104,6 @@ string FilterLayoutString(FilterLayout layout) {
   switch (layout) {
     case FilterLayout::kOutputInputYX:
       return "OutputInputYX";
-    case FilterLayout::kOutputInputYX4:
-      return "OutputInputYX4";
     case FilterLayout::kInputYXOutput:
       return "InputYXOutput";
     case FilterLayout::kYXInputOutput:
@@ -165,7 +161,6 @@ std::tuple<int, int, int> GetDimIndices(const DataLayout& layout,
       break;
 
     case DataLayout::kBatchDepthYX:
-    case DataLayout::kBatchDepthYX4:
       depth_idx = 1;
       batch_idx = 0;
       spatial_idx = 2;
@@ -229,14 +224,6 @@ std::vector<int64> BatchDescriptor::full_dims(const DataLayout& layout) const {
 
 std::vector<int64> BatchDescriptor::full_strides(
     const DataLayout& layout) const {
-  if (layout_ == DataLayout::kBatchDepthYX4) {
-    LOG(FATAL)
-        << "Cannot compute full strides for batch descriptor " << ToString()
-        << ", because its layout is kBatchDepthYX4. In fact, "
-           "cudnnSetTensorNdDescriptor doesn't work for kBatchDepthYX4 at all. "
-           "Use cudnnSetTensor4DDescriptor to set cudnnTensorDescriptor_t "
-           "instead.";
-  }
   std::vector<int64> phys_dims = full_dims(layout_);
   std::vector<int64> phys_strides(phys_dims.size());
   phys_strides[ndims_ + 1] = 1;
@@ -298,8 +285,6 @@ string BatchDescriptor::ToShortString() const {
       return port::StrCat(batch, spatial, depth, suffix);
     case DataLayout::kBatchDepthYX:
       return port::StrCat(batch, depth, spatial, suffix);
-    case DataLayout::kBatchDepthYX4:
-      return port::StrCat(batch, depth, spatial, suffix, "(VECT_C)");
     default:
       LOG(FATAL) << "Unknown layout " << static_cast<int32>(layout());
       return "";  // Avoid return warning (unreachable)
@@ -395,8 +380,6 @@ string FilterDescriptor::ToShortString() const {
   switch (layout_) {
     case FilterLayout::kOutputInputYX:
       return port::StrCat(od, id, spatial);
-    case FilterLayout::kOutputInputYX4:
-      return port::StrCat(od, id, spatial, "(VECT_C)");
     case FilterLayout::kInputYXOutput:
       return port::StrCat(id, spatial, od);
     case FilterLayout::kYXInputOutput:

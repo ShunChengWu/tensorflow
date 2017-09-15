@@ -32,7 +32,6 @@ HELP_INDENT = "  "
 
 EXPLICIT_USER_EXIT = "explicit_user_exit"
 REGEX_MATCH_LINES_KEY = "regex_match_lines"
-INIT_SCROLL_POS_KEY = "init_scroll_pos"
 
 MAIN_MENU_KEY = "mm:"
 
@@ -109,12 +108,11 @@ class RichLine(object):
     return len(self.text)
 
 
-def rich_text_lines_from_rich_line_list(rich_text_list, annotations=None):
+def rich_text_lines_from_rich_line_list(rich_text_list):
   """Convert a list of RichLine objects or strings to a RichTextLines object.
 
   Args:
     rich_text_list: a list of RichLine objects or strings
-    annotations: annotatoins for the resultant RichTextLines object.
 
   Returns:
     A corresponding RichTextLines object.
@@ -128,7 +126,7 @@ def rich_text_lines_from_rich_line_list(rich_text_list, annotations=None):
         font_attr_segs[i] = rl.font_attr_segs
     else:
       lines.append(rl)
-  return RichTextLines(lines, font_attr_segs, annotations=annotations)
+  return RichTextLines(lines, font_attr_segs)
 
 
 class RichTextLines(object):
@@ -840,7 +838,7 @@ class TabCompletionRegistry(object):
 
     Args:
       context_words: A list of context words belonging to the context being
-        registered. It is a list of str, instead of a single string, to support
+        registerd. It is a list of str, instead of a single string, to support
         synonym words triggering the same tab-completion context, e.g.,
         both "drink" and the short-hand "dr" can trigger the same context.
       comp_items: A list of completion items, as a list of str.

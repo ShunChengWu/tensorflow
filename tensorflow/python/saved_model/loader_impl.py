@@ -206,11 +206,8 @@ def load(sess, tags, export_dir, **saver_kwargs):
         break
 
     if not found_match:
-      raise RuntimeError(
-          "MetaGraphDef associated with tags " + str(tags).strip("[]") +
-          " could not be found in SavedModel. To inspect available tag-sets in"
-          " the SavedModel, please use the SavedModel CLI: `saved_model_cli`"
-      )
+      raise RuntimeError("MetaGraphDef associated with tags " + str(tags).strip(
+          "[]") + " could not be found in SavedModel")
 
     # Build a saver by importing the meta graph def to load.
     saver = tf_saver.import_meta_graph(meta_graph_def_to_load, **saver_kwargs)

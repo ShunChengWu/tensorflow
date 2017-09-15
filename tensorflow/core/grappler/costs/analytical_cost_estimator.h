@@ -37,15 +37,10 @@ struct GrapplerItem;
 class AnalyticalCostEstimator : public CostEstimator {
  public:
   // Does not take ownership of cluster.
-  AnalyticalCostEstimator(Cluster* cluster, bool use_static_shapes);
-  // Does not take ownership of the cluster, but takes ownership of the
-  // node_estimator
-  AnalyticalCostEstimator(Cluster* cluster,
-                          OpLevelCostEstimator* node_estimator,
-                          bool use_static_shapes);
+  explicit AnalyticalCostEstimator(Cluster* cluster, bool use_static_shapes);
   ~AnalyticalCostEstimator() override {}
 
-  // Initializes the estimator for the specified grappler item.
+  // Initalizes the estimator for the specified grappler item.
   // This implementation always returns OK.
   Status Initialize(const GrapplerItem& item) override;
 
@@ -58,7 +53,7 @@ class AnalyticalCostEstimator : public CostEstimator {
  private:
   Cluster* cluster_;  // Not owned.
   GrapplerItem item_;
-  std::unique_ptr<OpLevelCostEstimator> node_estimator_;
+  OpLevelCostEstimator node_estimator_;
   bool use_static_shapes_;
 };
 

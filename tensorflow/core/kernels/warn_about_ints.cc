@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/core/kernels/warn_about_ints.h"
-#include "tensorflow/core/framework/node_def.pb.h"
 
 namespace tensorflow {
 

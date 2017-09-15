@@ -110,14 +110,13 @@ class DebugNodeInserter {
   static Status SetDebugNodeAttributes(
       Node* debug_node, const std::unordered_map<string, string>& attributes);
 
-  static Status CreateDebugNode(Graph* graph, const Device& device,
+  static Status CreateDebugNode(Graph* graph, const DeviceType device_type,
                                 const string& src_copy_node_name,
                                 const DataType src_dt,
                                 const string& tensor_name,
                                 const std::vector<string>& debug_urls,
                                 const int debug_op_num,
                                 const string& debug_op_name, Node** debug_node);
-  // TODO(cais): Cut down the number of args to this method.
 
   friend class DebugGraphUtilsTest;
 };

@@ -28,7 +28,6 @@ import collections
 import hashlib
 import numbers
 
-from tensorflow.python.eager import context
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -42,7 +41,6 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import partitioned_variables
 from tensorflow.python.ops import random_ops
-from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.ops import variables as tf_variables
 from tensorflow.python.platform import tf_logging as logging
@@ -125,10 +123,9 @@ def _zero_state_tensors(state_size, batch_size, dtype):
   def get_state_shape(s):
     """Combine s with batch_size to get a proper tensor shape."""
     c = _concat(batch_size, s)
+    c_static = _concat(batch_size, s, static=True)
     size = array_ops.zeros(c, dtype=dtype)
-    if context.in_graph_mode():
-      c_static = _concat(batch_size, s, static=True)
-      size.set_shape(c_static)
+    size.set_shape(c_static)
     return size
   return nest.map_structure(get_state_shape, state_size)
 
@@ -184,12 +181,9 @@ class RNNCell(base_layer.Layer):
 
   def _rnn_get_variable(self, getter, *args, **kwargs):
     variable = getter(*args, **kwargs)
-    if context.in_graph_mode():
-      trainable = (variable in tf_variables.trainable_variables() or
-                   (isinstance(variable, tf_variables.PartitionedVariable) and
-                    list(variable)[0] in tf_variables.trainable_variables()))
-    else:
-      trainable = variable._trainable  # pylint: disable=protected-access
+    trainable = (variable in tf_variables.trainable_variables() or
+                 (isinstance(variable, tf_variables.PartitionedVariable) and
+                  list(variable)[0] in tf_variables.trainable_variables()))
     if trainable and variable not in self._trainable_weights:
       self._trainable_weights.append(variable)
     elif not trainable and variable not in self._non_trainable_weights:
@@ -266,18 +260,7 @@ class BasicRNNCell(RNNCell):
 
 
 class GRUCell(RNNCell):
-  """Gated Recurrent Unit cell (cf. http://arxiv.org/abs/1406.1078).
-
-  Args:
-    num_units: int, The number of units in the GRU cell.
-    activation: Nonlinearity to use.  Default: `tanh`.
-    reuse: (optional) Python boolean describing whether to reuse variables
-     in an existing scope.  If not `True`, and the existing scope already has
-     the given variables, an error is raised.
-    kernel_initializer: (optional) The initializer to use for the weight and
-    projection matrices.
-    bias_initializer: (optional) The initializer to use for the bias.
-  """
+  """Gated Recurrent Unit cell (cf. http://arxiv.org/abs/1406.1078)."""
 
   def __init__(self,
                num_units,
@@ -325,8 +308,7 @@ _LSTMStateTuple = collections.namedtuple("LSTMStateTuple", ("c", "h"))
 class LSTMStateTuple(_LSTMStateTuple):
   """Tuple used by LSTM Cells for `state_size`, `zero_state`, and output state.
 
-  Stores two elements: `(c, h)`, in that order. Where `c` is the hidden state
-  and `h` is the output.
+  Stores two elements: `(c, h)`, in that order.
 
   Only used when `state_is_tuple=True`.
   """
@@ -363,8 +345,6 @@ class BasicLSTMCell(RNNCell):
     Args:
       num_units: int, The number of units in the LSTM cell.
       forget_bias: float, The bias added to forget gates (see above).
-        Must set to `0.0` manually when restoring from CudnnLSTM-trained
-        checkpoints.
       state_is_tuple: If True, accepted and returned states are 2-tuples of
         the `c_state` and `m_state`.  If False, they are concatenated
         along the column axis.  The latter behavior will soon be deprecated.
@@ -372,9 +352,6 @@ class BasicLSTMCell(RNNCell):
       reuse: (optional) Python boolean describing whether to reuse variables
         in an existing scope.  If not `True`, and the existing scope already has
         the given variables, an error is raised.
-
-      When restoring from CudnnLSTM-trained checkpoints, must use
-      CudnnCompatibleLSTMCell instead.
     """
     super(BasicLSTMCell, self).__init__(_reuse=reuse)
     if not state_is_tuple:
@@ -395,20 +372,7 @@ class BasicLSTMCell(RNNCell):
     return self._num_units
 
   def call(self, inputs, state):
-    """Long short-term memory cell (LSTM).
-
-    Args:
-      inputs: `2-D` tensor with shape `[batch_size x input_size]`.
-      state: An `LSTMStateTuple` of state tensors, each shaped
-        `[batch_size x self.state_size]`, if `state_is_tuple` has been set to
-        `True`.  Otherwise, a `Tensor` shaped
-        `[batch_size x 2 * self.state_size]`.
-
-    Returns:
-      A pair containing the new hidden state, and the new state (either a
-        `LSTMStateTuple` or a concatenated state, depending on
-        `state_is_tuple`).
-    """
+    """Long short-term memory cell (LSTM)."""
     sigmoid = math_ops.sigmoid
     # Parameters of gates are concatenated into one multiply for efficiency.
     if self._state_is_tuple:
@@ -437,7 +401,7 @@ class LSTMCell(RNNCell):
 
   The default non-peephole implementation is based on:
 
-    http://www.bioinf.jku.at/publications/older/2604.pdf
+    http://deeplearning.cs.cmu.edu/pdfs/Hochreiter97_lstm.pdf
 
   S. Hochreiter and J. Schmidhuber.
   "Long Short-Term Memory". Neural Computation, 9(8):1735-1780, 1997.
@@ -463,7 +427,7 @@ class LSTMCell(RNNCell):
     """Initialize the parameters for an LSTM cell.
 
     Args:
-      num_units: int, The number of units in the LSTM cell.
+      num_units: int, The number of units in the LSTM cell
       use_peepholes: bool, set True to enable diagonal/peephole connections.
       cell_clip: (optional) A float value, if provided the cell state is clipped
         by this value prior to the cell output activation.
@@ -480,8 +444,7 @@ class LSTMCell(RNNCell):
         Use a variable_scope partitioner instead.
       forget_bias: Biases of the forget gate are initialized by default to 1
         in order to reduce the scale of forgetting at the beginning of
-        the training. Must set it manually to `0.0` when restoring from
-        CudnnLSTM trained checkpoints.
+        the training.
       state_is_tuple: If True, accepted and returned states are 2-tuples of
         the `c_state` and `m_state`.  If False, they are concatenated
         along the column axis.  This latter behavior will soon be deprecated.
@@ -489,9 +452,6 @@ class LSTMCell(RNNCell):
       reuse: (optional) Python boolean describing whether to reuse variables
         in an existing scope.  If not `True`, and the existing scope already has
         the given variables, an error is raised.
-
-      When restoring from CudnnLSTM-trained checkpoints, must use
-      CudnnCompatibleLSTMCell instead.
     """
     super(LSTMCell, self).__init__(_reuse=reuse)
     if not state_is_tuple:
@@ -628,23 +588,13 @@ class LSTMCell(RNNCell):
     return m, new_state
 
 
-def _enumerated_map_structure_up_to(shallow_structure, map_fn, *args, **kwargs):
+def _enumerated_map_structure(map_fn, *args, **kwargs):
   ix = [0]
   def enumerated_fn(*inner_args, **inner_kwargs):
     r = map_fn(ix[0], *inner_args, **inner_kwargs)
     ix[0] += 1
     return r
-  return nest.map_structure_up_to(shallow_structure,
-                                  enumerated_fn, *args, **kwargs)
-
-
-def _default_dropout_state_filter_visitor(substate):
-  if isinstance(substate, LSTMStateTuple):
-    # Do not perform dropout on the memory state.
-    return LSTMStateTuple(c=False, h=True)
-  elif isinstance(substate, tensor_array_ops.TensorArray):
-    return False
-  return True
+  return nest.map_structure(enumerated_fn, *args, **kwargs)
 
 
 class DropoutWrapper(RNNCell):
@@ -652,22 +602,16 @@ class DropoutWrapper(RNNCell):
 
   def __init__(self, cell, input_keep_prob=1.0, output_keep_prob=1.0,
                state_keep_prob=1.0, variational_recurrent=False,
-               input_size=None, dtype=None, seed=None,
-               dropout_state_filter_visitor=None):
+               input_size=None, dtype=None, seed=None):
     """Create a cell with added input, state, and/or output dropout.
 
     If `variational_recurrent` is set to `True` (**NOT** the default behavior),
-    then the same dropout mask is applied at every step, as described in:
+    then the the same dropout mask is applied at every step, as described in:
 
     Y. Gal, Z Ghahramani.  "A Theoretically Grounded Application of Dropout in
     Recurrent Neural Networks".  https://arxiv.org/abs/1512.05287
 
     Otherwise a different dropout mask is applied at every time step.
-
-    Note, by default (unless a custom `dropout_state_filter` is provided),
-    the memory state (`c` component of any `LSTMStateTuple`) passing through
-    a `DropoutWrapper` is never modified.  This behavior is described in the
-    above article.
 
     Args:
       cell: an RNNCell, a projection to output_size is added to it.
@@ -677,11 +621,7 @@ class DropoutWrapper(RNNCell):
         probability; if it is constant and 1, no output dropout will be added.
       state_keep_prob: unit Tensor or float between 0 and 1, output keep
         probability; if it is constant and 1, no output dropout will be added.
-        State dropout is performed on the outgoing states of the cell.
-        **Note** the state components to which dropout is applied when
-        `state_keep_prob` is in `(0, 1)` are also determined by
-        the argument `dropout_state_filter_visitor` (e.g. by default dropout
-        is never applied to the `c` component of an `LSTMStateTuple`).
+        State dropout is performed on the *output* states of the cell.
       variational_recurrent: Python bool.  If `True`, then the same
         dropout pattern is applied across all time steps per run call.
         If this parameter is set, `input_size` **must** be provided.
@@ -692,38 +632,13 @@ class DropoutWrapper(RNNCell):
       dtype: (optional) The `dtype` of the input, state, and output tensors.
         Required and used **iff** `variational_recurrent = True`.
       seed: (optional) integer, the randomness seed.
-      dropout_state_filter_visitor: (optional), default: (see below).  Function
-        that takes any hierarchical level of the state and returns
-        a scalar or depth=1 structure of Python booleans describing
-        which terms in the state should be dropped out.  In addition, if the
-        function returns `True`, dropout is applied across this sublevel.  If
-        the function returns `False`, dropout is not applied across this entire
-        sublevel.
-        Default behavior: perform dropout on all terms except the memory (`c`)
-        state of `LSTMCellState` objects, and don't try to apply dropout to
-        `TensorArray` objects:
-        ```
-        def dropout_state_filter_visitor(s):
-          if isinstance(s, LSTMCellState):
-            # Never perform dropout on the c state.
-            return LSTMCellState(c=False, h=True)
-          elif isinstance(s, TensorArray):
-            return False
-          return True
-        ```
 
     Raises:
-      TypeError: if `cell` is not an `RNNCell`, or `keep_state_fn` is provided
-        but not `callable`.
+      TypeError: if cell is not an RNNCell.
       ValueError: if any of the keep_probs are not between 0 and 1.
     """
     if not _like_rnncell(cell):
       raise TypeError("The parameter cell is not a RNNCell.")
-    if (dropout_state_filter_visitor is not None
-        and not callable(dropout_state_filter_visitor)):
-      raise TypeError("dropout_state_filter_visitor must be callable")
-    self._dropout_state_filter = (
-        dropout_state_filter_visitor or _default_dropout_state_filter_visitor)
     with ops.name_scope("DropoutWrapperInit"):
       def tensor_and_const_value(v):
         tensor_value = ops.convert_to_tensor(v)
@@ -772,16 +687,13 @@ class DropoutWrapper(RNNCell):
           raise ValueError(
               "When variational_recurrent=True and input_keep_prob < 1.0 or "
               "is unknown, input_size must be provided")
-        self._recurrent_input_noise = _enumerated_map_structure_up_to(
-            input_size,
+        self._recurrent_input_noise = _enumerated_map_structure(
             lambda i, s: batch_noise(s, inner_seed=self._gen_seed("input", i)),
             input_size)
-      self._recurrent_state_noise = _enumerated_map_structure_up_to(
-          cell.state_size,
+      self._recurrent_state_noise = _enumerated_map_structure(
           lambda i, s: batch_noise(s, inner_seed=self._gen_seed("state", i)),
           cell.state_size)
-      self._recurrent_output_noise = _enumerated_map_structure_up_to(
-          cell.output_size,
+      self._recurrent_output_noise = _enumerated_map_structure(
           lambda i, s: batch_noise(s, inner_seed=self._gen_seed("output", i)),
           cell.output_size)
 
@@ -816,34 +728,17 @@ class DropoutWrapper(RNNCell):
     ret.set_shape(value.get_shape())
     return ret
 
-  def _dropout(self, values, salt_prefix, recurrent_noise, keep_prob,
-               shallow_filtered_substructure=None):
+  def _dropout(self, values, salt_prefix, recurrent_noise, keep_prob):
     """Decides whether to perform standard dropout or recurrent dropout."""
-
-    if shallow_filtered_substructure is None:
-      # Put something so we traverse the entire structure; inside the
-      # dropout function we check to see if leafs of this are bool or not.
-      shallow_filtered_substructure = values
-
     if not self._variational_recurrent:
-      def dropout(i, do_dropout, v):
-        if not isinstance(do_dropout, bool) or do_dropout:
-          return nn_ops.dropout(
-              v, keep_prob=keep_prob, seed=self._gen_seed(salt_prefix, i))
-        else:
-          return v
-      return _enumerated_map_structure_up_to(
-          shallow_filtered_substructure, dropout,
-          *[shallow_filtered_substructure, values])
+      def dropout(i, v):
+        return nn_ops.dropout(
+            v, keep_prob=keep_prob, seed=self._gen_seed(salt_prefix, i))
+      return _enumerated_map_structure(dropout, values)
     else:
-      def dropout(i, do_dropout, v, n):
-        if not isinstance(do_dropout, bool) or do_dropout:
-          return self._variational_recurrent_dropout_value(i, v, n, keep_prob)
-        else:
-          return v
-      return _enumerated_map_structure_up_to(
-          shallow_filtered_substructure, dropout,
-          *[shallow_filtered_substructure, values, recurrent_noise])
+      def dropout(i, v, n):
+        return self._variational_recurrent_dropout_value(i, v, n, keep_prob)
+      return _enumerated_map_structure(dropout, values, recurrent_noise)
 
   def __call__(self, inputs, state, scope=None):
     """Run the cell with the declared dropouts."""
@@ -856,14 +751,9 @@ class DropoutWrapper(RNNCell):
                              self._input_keep_prob)
     output, new_state = self._cell(inputs, state, scope)
     if _should_dropout(self._state_keep_prob):
-      # Identify which subsets of the state to perform dropout on and
-      # which ones to keep.
-      shallow_filtered_substructure = nest.get_traverse_shallow_structure(
-          self._dropout_state_filter, new_state)
       new_state = self._dropout(new_state, "state",
                                 self._recurrent_state_noise,
-                                self._state_keep_prob,
-                                shallow_filtered_substructure)
+                                self._state_keep_prob)
     if _should_dropout(self._output_keep_prob):
       output = self._dropout(output, "output",
                              self._recurrent_output_noise,
@@ -874,18 +764,13 @@ class DropoutWrapper(RNNCell):
 class ResidualWrapper(RNNCell):
   """RNNCell wrapper that ensures cell inputs are added to the outputs."""
 
-  def __init__(self, cell, residual_fn=None):
+  def __init__(self, cell):
     """Constructs a `ResidualWrapper` for `cell`.
 
     Args:
       cell: An instance of `RNNCell`.
-      residual_fn: (Optional) The function to map raw cell inputs and raw cell
-        outputs to the actual cell outputs of the residual network.
-        Defaults to calling nest.map_structure on (lambda i, o: i + o), inputs
-        and outputs.
     """
     self._cell = cell
-    self._residual_fn = residual_fn
 
   @property
   def state_size(self):
@@ -900,7 +785,7 @@ class ResidualWrapper(RNNCell):
       return self._cell.zero_state(batch_size, dtype)
 
   def __call__(self, inputs, state, scope=None):
-    """Run the cell and then apply the residual_fn on its inputs to its outputs.
+    """Run the cell and add its inputs to its outputs.
 
     Args:
       inputs: cell inputs.
@@ -915,14 +800,13 @@ class ResidualWrapper(RNNCell):
       ValueError: If cell inputs and outputs have different structure (value).
     """
     outputs, new_state = self._cell(inputs, state, scope=scope)
+    nest.assert_same_structure(inputs, outputs)
     # Ensure shapes match
     def assert_shape_match(inp, out):
       inp.get_shape().assert_is_compatible_with(out.get_shape())
-    def default_residual_fn(inputs, outputs):
-      nest.assert_same_structure(inputs, outputs)
-      nest.map_structure(assert_shape_match, inputs, outputs)
-      return nest.map_structure(lambda inp, out: inp + out, inputs, outputs)
-    res_outputs = (self._residual_fn or default_residual_fn)(inputs, outputs)
+    nest.map_structure(assert_shape_match, inputs, outputs)
+    res_outputs = nest.map_structure(
+        lambda inp, out: inp + out, inputs, outputs)
     return (res_outputs, new_state)
 
 

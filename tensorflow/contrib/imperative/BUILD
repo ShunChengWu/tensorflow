@@ -20,18 +20,6 @@ py_library(
     deps = [
         ":imperative_graph",
         ":imperative_mode",
-        "//tensorflow/core:protos_all_py",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:client",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:dtypes",
-        "//tensorflow/python:errors",
-        "//tensorflow/python:framework",
-        "//tensorflow/python:framework_ops",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:tensor_shape",
-        "//tensorflow/python:util",
-        "//tensorflow/python:variables",
     ],
 )
 
@@ -40,16 +28,9 @@ py_library(
     srcs = ["imperative_graph.py"],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/core:protos_all_py",
-        "//tensorflow/python:array_ops",
-        "//tensorflow/python:control_flow_ops",
-        "//tensorflow/python:dtypes",
-        "//tensorflow/python:errors",
-        "//tensorflow/python:framework_ops",
-        "//tensorflow/python:state_ops",
-        "//tensorflow/python:tensor_shape",
+        "//tensorflow/python:framework",
+        "//tensorflow/python:ops",
         "//tensorflow/python:util",
-        "//tensorflow/python:variables",
     ],
 )
 
@@ -60,9 +41,7 @@ py_library(
     deps = [
         ":imperative_graph",
         "//tensorflow/python:client",
-        "//tensorflow/python:errors",
         "//tensorflow/python:framework",
-        "//tensorflow/python:framework_ops",
     ],
 )
 

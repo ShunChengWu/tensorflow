@@ -30,6 +30,8 @@ limitations under the License.
 namespace tensorflow {
 namespace ctc {
 
+using strings::StrCat;
+
 class CTCLossCalculator {
   // Connectionist Temporal Classification Loss
   //
@@ -46,7 +48,7 @@ class CTCLossCalculator {
   // these examples.
   //
   // Reference materials:
-  //  GravesTh: Alex Graves, "Supervised Sequence Labeling with Recurrent
+  //  GravesTh: Alex Graves, "Supervised Sequence Labelling with Recurrent
   //    Neural Networks" (PhD Thesis), Technische Universit¨at M¨unchen.
  public:
   typedef std::vector<std::vector<int>> LabelSequences;

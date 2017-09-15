@@ -18,7 +18,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-#include "tensorflow/core/framework/attr_value.pb.h"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -91,11 +90,10 @@ const string& HloTfGraphBuilder::GetNodeNameForInstruction(
   string node_name;
   // If an instruction is fused, put it in the subgraph of the fusion;
   // otherwise, put it in the computation subgraph.
-  const HloComputation* computation = instruction->parent();
-  if (computation->IsFusionComputation()) {
-    node_name = GetNodeNameForInstruction(computation->FusionInstruction());
+  if (instruction->IsFused()) {
+    node_name = GetNodeNameForInstruction(instruction->fusion_instruction());
   } else {
-    node_name = computation->name();
+    node_name = instruction->parent()->name();
     if (!instruction->metadata().op_name().empty()) {
       // Always make computations contain TF ops but not the other way around.
       StrAppend(&node_name, "/", instruction->metadata().op_name());
@@ -172,7 +170,8 @@ void HloTfGraphBuilder::SetNodeAttrs(const HloInstruction* instruction,
       break;
     case HloOpcode::kConstant:
       if (ShapeUtil::IsScalar(instruction->shape())) {
-        attrs["value"].set_s(instruction->literal().GetAsString({}));
+        attrs["value"].set_s(
+            LiteralUtil::GetAsString(instruction->literal(), {}));
       }
       break;
     case HloOpcode::kCustomCall:

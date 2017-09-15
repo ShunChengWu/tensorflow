@@ -208,8 +208,9 @@ TEST_F(NodeDefBuilderTest, OpDoesNotExist) {
       .ControlInput("y")
       .Attr("foo", 12)
       .Device("device");
-  ExpectFailures(builder, {"Op type not registered 'Op Does Not Exist'",
-                           "while building NodeDef 'n'"});
+  ExpectFailure(
+      builder,
+      "Op type not registered 'Op Does Not Exist' while building NodeDef 'n'");
 }
 
 TEST_F(NodeDefBuilderTest, Polymorphic) {

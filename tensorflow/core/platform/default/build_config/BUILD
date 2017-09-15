@@ -17,7 +17,7 @@ cc_library(
     testonly = 1,
     copts = tf_copts(),
     deps = [
-        "@com_google_googletest//:gtest",
+        "//external:gtest",
     ],
 )
 

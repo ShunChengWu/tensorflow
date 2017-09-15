@@ -168,7 +168,7 @@ Status DebugNodeInserter::InsertNodes(
 
         Node* debug_node;
         Status debug_s = CreateDebugNode(
-            graph, *device, copy_node->name(), src_dt, tensor_name,
+            graph, device_type, copy_node->name(), src_dt, tensor_name,
             tensor_watch_urls[tensor_name], i, debug_op_name, &debug_node);
         if (debug_s.ok()) {
           graph->AddEdge(copy_node, 0, debug_node, 0);
@@ -223,16 +223,19 @@ Status DebugNodeInserter::InsertNodes(
 void DebugNodeInserter::DeparallelizeWhileLoops(Graph* graph, Device* device) {
   for (Node* node : graph->nodes()) {
     if (node->IsEnter()) {
-      const AttrValue* parallel_iterations =
-          node->attrs().Find("parallel_iterations");
-      if (parallel_iterations && parallel_iterations->i() > 1) {
-        LOG(INFO) << "For debugging, tfdbg is changing the "
-                  << "parallel_iterations attribute of the Enter/RefEnter "
-                  << "node \"" << node->name() << "\" on device \""
-                  << device->name() << "\" from " << parallel_iterations->i()
-                  << " to 1. (This does not affect subsequent non-debug "
-                  << "runs.)";
-        node->AddAttr<int64>("parallel_iterations", 1);
+      for (const auto& attr : node->def().attr()) {
+        if (attr.first == "parallel_iterations") {
+          if (attr.second.i() > 1) {
+            LOG(INFO) << "For debugging, tfdbg is changing the "
+                      << "parallel_iterations attribute of the Enter/RefEnter "
+                      << "node \"" << node->name() << "\" on device \""
+                      << device->name() << "\" from " << attr.second.i()
+                      << " to 1. (This does not affect subsequent non-debug "
+                      << "runs.)";
+            node->AddAttr<int64>("parallel_iterations", 1);
+          }
+          break;
+        }
       }
     }
   }
@@ -432,10 +435,10 @@ Status DebugNodeInserter::SetDebugNodeAttributes(
 
 // static
 Status DebugNodeInserter::CreateDebugNode(
-    Graph* graph, const Device& device, const string& src_copy_node_name,
-    const DataType src_dt, const string& tensor_name,
-    const std::vector<string>& debug_urls, const int debug_op_num,
-    const string& debug_op_name, Node** debug_node) {
+    Graph* graph, const DeviceType device_type,
+    const string& src_copy_node_name, const DataType src_dt,
+    const string& tensor_name, const std::vector<string>& debug_urls,
+    const int debug_op_num, const string& debug_op_name, Node** debug_node) {
   NodeDef node_def;
   const KernelDef* kdef;
 
@@ -448,7 +451,6 @@ Status DebugNodeInserter::CreateDebugNode(
       GetDebugNodeName(tensor_name, debug_op_num, debug_op_name_proper);
   auto builder = NodeDefBuilder(debug_node_name, debug_op_name_proper)
                      .Input(src_copy_node_name, 0, src_dt)
-                     .Attr("device_name", device.name())
                      .Attr("tensor_name", tensor_name)
                      .Attr("debug_urls", debug_urls);
 
@@ -457,8 +459,7 @@ Status DebugNodeInserter::CreateDebugNode(
         "Failed to create node definition for debug op ", debug_op_name_proper,
         " on watched tensor ", tensor_name);
   }
-  if (!FindKernelDef(DeviceType(device.device_type()), node_def, &kdef, nullptr)
-           .ok()) {
+  if (!FindKernelDef(device_type, node_def, &kdef, nullptr).ok()) {
     return errors::FailedPrecondition(
         "Failed to find kernel definition for debug op ", debug_op_name_proper,
         " on watched tensor ", tensor_name);

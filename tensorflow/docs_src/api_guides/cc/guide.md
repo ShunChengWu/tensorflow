@@ -59,8 +59,7 @@ cc_binary(
 )
 ```
 
-You should be able to build and run the example using the following command
-(be sure to run `./configure` in your build sandbox first):
+You should be able to build and run the example using the following command:
 
 ```shell
 bazel run -c opt //tensorflow/cc/example:example
@@ -112,7 +111,7 @@ Here are some of the properties controlled by a `Scope` object:
 Please refer to @{tensorflow::Scope} for the complete list of member functions
 that let you create child scopes with new properties.
 
-### Operation Constructors
+### Operation Construtors
 
 You can create graph operations with operation constructors, one C++ class per
 TensorFlow operation. Unlike the Python API which uses snake-case to name the

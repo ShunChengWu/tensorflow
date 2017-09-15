@@ -39,7 +39,7 @@ class BetaincOp : public OpKernel {
  public:
   explicit BetaincOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
 
-  void Compute(OpKernelContext* ctx) override {
+  void Compute(OpKernelContext* ctx) {
     const Tensor& a = ctx->input(0);
     const Tensor& b = ctx->input(1);
     const Tensor& x = ctx->input(2);

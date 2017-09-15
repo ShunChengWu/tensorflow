@@ -22,8 +22,6 @@ import re
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
 
-from tensorflow.core.protobuf import config_pb2
-from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.client import session
 from tensorflow.python.debug.cli import stepper_cli
 from tensorflow.python.debug.lib import stepper
@@ -145,11 +143,7 @@ class NodeStepperSimpleGraphTest(test_util.TensorFlowTestCase):
     self.opt = gradient_descent.GradientDescentOptimizer(0.1).minimize(
         self.e, name="opt")
 
-    rewriter_config = rewriter_config_pb2.RewriterConfig(
-        disable_model_pruning=True)
-    graph_options = config_pb2.GraphOptions(rewrite_options=rewriter_config)
-    config = config_pb2.ConfigProto(graph_options=graph_options)
-    self.sess = session.Session(config=config)
+    self.sess = session.Session()
 
     self.sess.run(self.a.initializer)
     self.sess.run(self.b.initializer)

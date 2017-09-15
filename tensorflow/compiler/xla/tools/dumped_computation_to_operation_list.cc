@@ -81,7 +81,6 @@ void RealMain(tensorflow::gtl::ArraySlice<char*> args) {
         client->GetComputationShape(computation).ConsumeValueOrDie();
 
     std::vector<const Shape*> layouts;
-    layouts.reserve(program_shape->parameters_size());
     for (int i = 0; i < program_shape->parameters_size(); ++i) {
       layouts.push_back(&program_shape->parameters(i));
     }
@@ -94,7 +93,7 @@ void RealMain(tensorflow::gtl::ArraySlice<char*> args) {
 
     OperationDumper dumper(arg);
     for (auto& computation : module.computations()) {
-      TF_CHECK_OK(computation->Accept(&dumper));
+      TF_CHECK_OK(computation->root_instruction()->Accept(&dumper));
     }
   }
 }

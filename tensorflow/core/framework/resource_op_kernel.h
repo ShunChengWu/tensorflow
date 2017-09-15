@@ -95,9 +95,11 @@ class ResourceOpKernel : public OpKernel {
       resource_ = resource;
     }
     if (context->expected_output_dtype(0) == DT_RESOURCE) {
-      OP_REQUIRES_OK(context, MakeResourceHandleToOutput(
-                                  context, 0, cinfo_.container(), cinfo_.name(),
-                                  MakeTypeIndex<T>()));
+      Tensor* handle;
+      OP_REQUIRES_OK(context,
+                     context->allocate_output(0, TensorShape({}), &handle));
+      handle->scalar<ResourceHandle>()() =
+          MakeResourceHandle<T>(context, cinfo_.container(), cinfo_.name());
     } else {
       context->set_output_ref(0, &mu_, handle_.AccessTensor(context));
     }

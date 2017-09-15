@@ -33,6 +33,7 @@ namespace tensorflow {
 typedef Eigen::ThreadPoolDevice CPUDevice;
 
 namespace {
+
 struct CachedInterpolation {
   int64 start;
   int64 end;
@@ -40,7 +41,7 @@ struct CachedInterpolation {
   float end_minus_one_scale;
   bool needs_bounding;
 };
-}  // namespace
+};
 
 template <typename Device, typename T>
 class ResizeAreaOp : public OpKernel {
@@ -169,7 +170,7 @@ class ResizeAreaOp : public OpKernel {
                    : (v + 1 > in_x1 ? in_x1 - v : 1.0);
 
       v = ceil(in_x1);
-      x_interp.end = v;
+      x_interp.end = ceil(in_x1);
       v = x_interp.end - 1;
       x_interp.end_minus_one_scale =
           v < in_x ? (v + 1 > in_x1 ? st.width_scale : v + 1 - in_x)

@@ -15,8 +15,6 @@ limitations under the License.
 
 #include "tensorflow/core/distributed_runtime/rpc/grpc_session.h"
 
-#include <memory>
-
 #include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/debug/debug_io_utils.h"
 #include "tensorflow/core/distributed_runtime/rpc/grpc_testlib.h"
@@ -27,6 +25,7 @@ limitations under the License.
 #include "tensorflow/core/graph/default_device.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/testlib.h"
+#include "tensorflow/core/lib/core/error_codes.pb.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/lib/io/path.h"
 #include "tensorflow/core/lib/strings/strcat.h"
@@ -35,13 +34,13 @@ limitations under the License.
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/test.h"
 #include "tensorflow/core/protobuf/debug.pb.h"
+#include "tensorflow/core/protobuf/master.pb.h"
 #include "tensorflow/core/public/session.h"
 #include "tensorflow/core/util/port.h"
 
 namespace tensorflow {
-namespace {
 
-SessionOptions Devices(int num_cpus, int num_gpus) {
+static SessionOptions Devices(int num_cpus, int num_gpus) {
   SessionOptions result;
   (*result.config.mutable_device_count())["CPU"] = num_cpus;
   (*result.config.mutable_device_count())["GPU"] = num_gpus;
@@ -70,13 +69,13 @@ void CreateGraphDef(GraphDef* graph_def, string node_names[3]) {
 
 // Asserts that "val" is a single float tensor. The only float is
 // "expected_val".
-void IsSingleFloatValue(const Tensor& val, float expected_val) {
+static void IsSingleFloatValue(const Tensor& val, float expected_val) {
   ASSERT_EQ(val.dtype(), DT_FLOAT);
   ASSERT_EQ(val.NumElements(), 1);
   ASSERT_EQ(val.flat<float>()(0), expected_val);
 }
 
-SessionOptions Options(const string& target, int placement_period) {
+static SessionOptions Options(const string& target, int placement_period) {
   SessionOptions options;
   // NOTE(mrry): GrpcSession requires a grpc:// scheme prefix in the target
   // string.
@@ -88,8 +87,8 @@ SessionOptions Options(const string& target, int placement_period) {
   return options;
 }
 
-std::unique_ptr<Session> NewRemote(const SessionOptions& options) {
-  return std::unique_ptr<Session>(CHECK_NOTNULL(NewSession(options)));
+static Session* NewRemote(const SessionOptions& options) {
+  return CHECK_NOTNULL(NewSession(options));
 }
 
 class GrpcSessionDebugTest : public ::testing::Test {
@@ -152,7 +151,9 @@ TEST_F(GrpcSessionDebugTest, FileDebugURL) {
   std::unique_ptr<test::TestCluster> cluster;
   TF_CHECK_OK(test::TestCluster::MakeTestCluster(Devices(1, 0), 2, &cluster));
 
-  auto session = NewRemote(Options(cluster->targets()[0], 1));
+  std::unique_ptr<Session> session(
+      NewRemote(Options(cluster->targets()[0], 1)));
+  ASSERT_TRUE(session != nullptr);
   TF_CHECK_OK(session->Create(graph));
 
   // Iteration 0: No watch.
@@ -186,10 +187,7 @@ TEST_F(GrpcSessionDebugTest, FileDebugURL) {
     IsSingleFloatValue(outputs[0], 4.0);
 
     std::vector<Tensor> dumped_tensors;
-    LoadTensorDumps(io::JoinPath(DebugNodeKey::DeviceNameToDevicePath(
-                                     cluster->devices()[0].name()),
-                                 "n"),
-                    &dumped_tensors);
+    LoadTensorDumps("n", &dumped_tensors);
 
     if (i == 0 || i == 5) {
       ASSERT_EQ(0, dumped_tensors.size());
@@ -221,7 +219,9 @@ void SetDevice(GraphDef* graph, const string& name, const string& dev) {
 TEST_F(GrpcSessionDebugTest, MultiDevices_String) {
   std::unique_ptr<test::TestCluster> cluster;
   TF_CHECK_OK(test::TestCluster::MakeTestCluster(Devices(1, 1), 2, &cluster));
-  auto session = NewRemote(Options(cluster->targets()[0], 1000));
+  std::unique_ptr<Session> session(
+      NewRemote(Options(cluster->targets()[0], 1000)));
+  ASSERT_TRUE(session != nullptr);
 
   // b = a
   Graph graph(OpRegistry::Global());
@@ -267,10 +267,7 @@ TEST_F(GrpcSessionDebugTest, MultiDevices_String) {
         TF_CHECK_OK(session->Close());
 
         std::vector<Tensor> dumped_tensors;
-        LoadTensorDumps(
-            io::JoinPath(DebugNodeKey::DeviceNameToDevicePath(a_dev.name()),
-                         "n"),
-            &dumped_tensors);
+        LoadTensorDumps("n", &dumped_tensors);
         ASSERT_EQ(1, dumped_tensors.size());
         ASSERT_EQ(TensorShape({2, 2}), dumped_tensors[0].shape());
         for (size_t i = 0; i < 4; ++i) {
@@ -279,17 +276,13 @@ TEST_F(GrpcSessionDebugTest, MultiDevices_String) {
 
         DeleteDumpDir();
       } else {
-        // CUDA and SYCL devices do not have an Identity op for strings
         LOG(ERROR) << "Error: " << s;
         ASSERT_TRUE((a_dev.device_type() == DEVICE_GPU) ||
-                    (a_dev.device_type() == DEVICE_SYCL) ||
-                    (b_dev.device_type() == DEVICE_GPU) ||
-                    (b_dev.device_type() == DEVICE_SYCL));
+                    (b_dev.device_type() == DEVICE_GPU));
         ASSERT_FALSE(s.ok());
       }
     }
   }
 }
 
-}  // namespace
 }  // namespace tensorflow

@@ -67,25 +67,6 @@ flags = flags_lib
 FLAGS = flags.FLAGS
 
 
-# Support folding two types of batch norm ops:
-# BatchNormWithGlobalNormalization and FusedBatchNorm.  The two types only
-# differ in input order and attribute names, so we've collected their
-# differences up front.
-INPUT_ORDER = {
-    # Order of inputs for BatchNormWithGlobalNormalization.
-    "BatchNormWithGlobalNormalization": [
-        "conv_op", "mean_op", "var_op", "beta_op", "gamma_op"
-    ],
-    # Order of inputs for FusedBatchNorm.
-    "FusedBatchNorm": ["conv_op", "gamma_op", "beta_op", "mean_op", "var_op"]
-}
-# Name of the attribute epsilon value is stored in.
-EPSILON_ATTR = {
-    "BatchNormWithGlobalNormalization": "variance_epsilon",
-    "FusedBatchNorm": "epsilon"
-}
-
-
 def optimize_for_inference(input_graph_def, input_node_names, output_node_names,
                            placeholder_type_enum):
   """Applies a series of inference optimizations on the input graph.
@@ -104,11 +85,11 @@ def optimize_for_inference(input_graph_def, input_node_names, output_node_names,
   """
   ensure_graph_is_valid(input_graph_def)
   optimized_graph_def = input_graph_def
-  optimized_graph_def = strip_unused_lib.strip_unused(
-      optimized_graph_def, input_node_names, output_node_names,
-      placeholder_type_enum)
-  optimized_graph_def = graph_util.remove_training_nodes(
-      optimized_graph_def, output_node_names)
+  optimized_graph_def = strip_unused_lib.strip_unused(optimized_graph_def,
+                                                      input_node_names,
+                                                      output_node_names,
+                                                      placeholder_type_enum)
+  optimized_graph_def = graph_util.remove_training_nodes(optimized_graph_def)
   optimized_graph_def = fold_batch_norms(optimized_graph_def)
   optimized_graph_def = fuse_resize_and_conv(optimized_graph_def,
                                              output_node_names)
@@ -191,13 +172,6 @@ def values_from_const(node_def):
   return tensor_value
 
 
-# Whether to scale by gamma after normalization.
-def scale_after_normalization(node):
-  if node.op == "BatchNormWithGlobalNormalization":
-    return node.attr["scale_after_normalization"].b
-  return True
-
-
 def fold_batch_norms(input_graph_def):
   """Removes batch normalization ops by folding them into convolutions.
 
@@ -220,6 +194,7 @@ def fold_batch_norms(input_graph_def):
   Raises:
     ValueError: If the graph is badly formed with duplicate node names.
   """
+
   input_node_map = {}
   for node in input_graph_def.node:
     if node.name not in input_node_map.keys():
@@ -230,14 +205,13 @@ def fold_batch_norms(input_graph_def):
   nodes_to_skip = {}
   new_ops = []
   for node in input_graph_def.node:
-    if node.op not in ("BatchNormWithGlobalNormalization", "FusedBatchNorm"):
+    if node.op != "BatchNormWithGlobalNormalization":
       continue
 
-    conv_op = node_from_map(input_node_map,
-                            node.input[INPUT_ORDER[node.op].index("conv_op")])
+    conv_op = node_from_map(input_node_map, node.input[0])
     if conv_op.op != "Conv2D":
-      tf_logging.warning(
-          "Didn't find expected Conv2D input to '%s'" % node.name)
+      tf_logging.warning("Didn't find expected Conv2D input to '%s'" %
+                         node.name)
       continue
 
     weights_op = node_from_map(input_node_map, conv_op.input[1])
@@ -249,8 +223,7 @@ def fold_batch_norms(input_graph_def):
     weights = values_from_const(weights_op)
     channel_count = weights.shape[3]
 
-    mean_op = node_from_map(input_node_map,
-                            node.input[INPUT_ORDER[node.op].index("mean_op")])
+    mean_op = node_from_map(input_node_map, node.input[1])
     if mean_op.op != "Const":
       tf_logging.warning("Didn't find expected mean Constant input to '%s',"
                          " found %s instead. Maybe because freeze_graph wasn't"
@@ -263,8 +236,7 @@ def fold_batch_norms(input_graph_def):
                              (channel_count,)), node.name))
       continue
 
-    var_op = node_from_map(input_node_map,
-                           node.input[INPUT_ORDER[node.op].index("var_op")])
+    var_op = node_from_map(input_node_map, node.input[2])
     if var_op.op != "Const":
       tf_logging.warning("Didn't find expected var Constant input to '%s',"
                          " found %s instead. Maybe because freeze_graph wasn't"
@@ -277,8 +249,7 @@ def fold_batch_norms(input_graph_def):
                              (channel_count,)), node.name))
       continue
 
-    beta_op = node_from_map(input_node_map,
-                            node.input[INPUT_ORDER[node.op].index("beta_op")])
+    beta_op = node_from_map(input_node_map, node.input[3])
     if beta_op.op != "Const":
       tf_logging.warning("Didn't find expected beta Constant input to '%s',"
                          " found %s instead. Maybe because freeze_graph wasn't"
@@ -291,8 +262,7 @@ def fold_batch_norms(input_graph_def):
                              (channel_count,)), node.name))
       continue
 
-    gamma_op = node_from_map(input_node_map,
-                             node.input[INPUT_ORDER[node.op].index("gamma_op")])
+    gamma_op = node_from_map(input_node_map, node.input[4])
     if gamma_op.op != "Const":
       tf_logging.warning("Didn't find expected gamma Constant input to '%s',"
                          " found %s instead. Maybe because freeze_graph wasn't"
@@ -305,7 +275,8 @@ def fold_batch_norms(input_graph_def):
                              (channel_count,)), node.name))
       continue
 
-    variance_epsilon_value = node.attr[EPSILON_ATTR[node.op]].f
+    variance_epsilon_value = node.attr["variance_epsilon"].f
+    scale_after_normalization = node.attr["scale_after_normalization"].b
     nodes_to_skip[node.name] = True
     nodes_to_skip[weights_op.name] = True
     nodes_to_skip[mean_op.name] = True
@@ -314,7 +285,7 @@ def fold_batch_norms(input_graph_def):
     nodes_to_skip[gamma_op.name] = True
     nodes_to_skip[conv_op.name] = True
 
-    if scale_after_normalization(node):
+    if scale_after_normalization:
       scale_value = (
           (1.0 / np.vectorize(math.sqrt)(var_value + variance_epsilon_value)) *
           gamma_value)
@@ -374,8 +345,6 @@ def fuse_resize_and_conv(input_graph_def, output_node_names):
 
   Args:
     input_graph_def: A GraphDef containing a model.
-    output_node_names: A list of names of the nodes that produce the final
-      results.
 
   Returns:
     Modified graph with resize and pad ops merged.
@@ -458,8 +427,8 @@ def fuse_resize_and_conv(input_graph_def, output_node_names):
           resize_op.input[0], resize_op.input[1], mirror_paddings_name,
           conv_op.input[1]
       ])
-      fused_conv_op.attr["resize_align_corners"].CopyFrom(
-          resize_op.attr["align_corners"])
+      fused_conv_op.attr["resize_align_corners"].CopyFrom(resize_op.attr[
+          "align_corners"])
     else:
       fused_conv_op.input.extend(
           [mirror_pad_op.input[0], mirror_paddings_name, conv_op.input[1]])

@@ -56,7 +56,6 @@ void RealMain(tensorflow::gtl::ArraySlice<char*> args, bool compile) {
           client->GetComputationShape(computation).ConsumeValueOrDie();
 
       std::vector<const Shape*> layouts;
-      layouts.reserve(program_shape->parameters_size());
       for (int i = 0; i < program_shape->parameters_size(); ++i) {
         layouts.push_back(&program_shape->parameters(i));
       }
@@ -77,8 +76,7 @@ void RealMain(tensorflow::gtl::ArraySlice<char*> args, bool compile) {
       VersionedComputationHandle versioned_handle =
           user_computation->GetVersionedHandle();
       std::unique_ptr<HloModule> module =
-          tracker.BuildHloModule(versioned_handle, HloModuleConfig())
-              .ConsumeValueOrDie();
+          tracker.BuildHloModule(versioned_handle).ConsumeValueOrDie();
 
       fprintf(stdout, "%s\n", module->ToString().c_str());
     }

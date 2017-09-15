@@ -392,8 +392,7 @@ struct LaunchConvOp<GPUDevice, T> {
     if (cudnn_use_autotune && !AutoTuneConv3d::GetInstance()->Find(
                                   conv_parameters, &algorithm_config)) {
       std::vector<AlgorithmType> algorithms;
-      CHECK(stream->parent()->GetConvolveAlgorithms(
-          conv_parameters.ShouldIncludeWinogradNonfusedAlgo<T>(), &algorithms));
+      CHECK(stream->parent()->GetConvolveAlgorithms(&algorithms));
       ProfileResult best_result;
       ProfileResult best_result_no_scratch;
       for (auto profile_algorithm : algorithms) {
@@ -423,15 +422,16 @@ struct LaunchConvOp<GPUDevice, T> {
         }
       }
       OP_REQUIRES(ctx,
-                  best_result.is_valid() || best_result_no_scratch.is_valid(),
+                  best_result.is_valid() &&
+                      best_result.algorithm() != kDefaultAlgorithm,
                   errors::NotFound("No algorithm worked!"));
-      if (best_result.is_valid()) {
-        algorithm_config.set_algorithm(best_result.algorithm());
-      }
-      if (best_result_no_scratch.is_valid()) {
-        algorithm_config.set_algorithm_no_scratch(
-            best_result_no_scratch.algorithm());
-      }
+      OP_REQUIRES(ctx,
+                  best_result_no_scratch.is_valid() &&
+                      best_result_no_scratch.algorithm() != kDefaultAlgorithm,
+                  errors::NotFound("No algorithm without scratch worked!"));
+      algorithm_config.set_algorithm(best_result.algorithm());
+      algorithm_config.set_algorithm_no_scratch(
+          best_result_no_scratch.algorithm());
       AutoTuneConv3d::GetInstance()->Insert(conv_parameters, algorithm_config);
     }
 

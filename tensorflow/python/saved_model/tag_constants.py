@@ -28,12 +28,9 @@ SERVING = "serve"
 # Tag for the `training` graph.
 TRAINING = "train"
 
-# Tag for the `gpu` graph.
-GPU = "gpu"
 
 _allowed_symbols = [
     "SERVING",
-    "TRAINING",
-    "GPU"
+    "TRAINING"
 ]
 remove_undocumented(__name__, _allowed_symbols)

@@ -59,11 +59,6 @@ mathematical functions to your graph.
 *   @{tf.acos}
 *   @{tf.asin}
 *   @{tf.atan}
-*   @{tf.cosh}
-*   @{tf.sinh}
-*   @{tf.asinh}
-*   @{tf.acosh}
-*   @{tf.atanh}
 *   @{tf.lgamma}
 *   @{tf.digamma}
 *   @{tf.erf}
@@ -122,7 +117,6 @@ functions to your graph.
 *   @{tf.complex}
 *   @{tf.conj}
 *   @{tf.imag}
-*   @{tf.angle}
 *   @{tf.real}
 
 

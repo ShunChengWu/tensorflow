@@ -16,7 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_SERVICE_DFS_HLO_VISITOR_WITH_DEFAULT_H_
 #define TENSORFLOW_COMPILER_XLA_SERVICE_DFS_HLO_VISITOR_WITH_DEFAULT_H_
 
-#include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/dfs_hlo_visitor.h"
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/types.h"
@@ -41,25 +40,15 @@ class DfsHloVisitorWithDefault : public DfsHloVisitor {
   // Default action performed on HloInstruction.
   virtual Status DefaultAction(HloInstruction* hlo_instruction) = 0;
 
-  Status HandleElementwiseUnary(HloInstruction* hlo) override {
+  Status HandleElementwiseUnary(HloInstruction* hlo, HloOpcode opcode,
+                                HloInstruction* operand) override {
     return DefaultAction(hlo);
   }
-  Status HandleElementwiseBinary(HloInstruction* hlo) override {
+  Status HandleElementwiseBinary(HloInstruction* hlo, HloOpcode opcode,
+                                 HloInstruction* lhs,
+                                 HloInstruction* rhs) override {
     return DefaultAction(hlo);
   }
-
-  Status HandleBatchNormTraining(HloInstruction* hlo) override {
-    return DefaultAction(hlo);
-  }
-
-  Status HandleBatchNormInference(HloInstruction* hlo) override {
-    return DefaultAction(hlo);
-  }
-
-  Status HandleBatchNormGrad(HloInstruction* hlo) override {
-    return DefaultAction(hlo);
-  }
-
   Status HandleClamp(HloInstruction* clamp, HloInstruction* /*min*/,
                      HloInstruction* /*arg*/,
                      HloInstruction* /*max*/) override {
@@ -70,10 +59,12 @@ class DfsHloVisitorWithDefault : public DfsHloVisitor {
       tensorflow::gtl::ArraySlice<HloInstruction*> /*operands*/) override {
     return DefaultAction(concatenate);
   }
-  Status HandleConvert(HloInstruction* convert) override {
+  Status HandleConvert(HloInstruction* convert,
+                       HloInstruction* /*operand*/) override {
     return DefaultAction(convert);
   }
-  Status HandleCopy(HloInstruction* copy) override {
+  Status HandleCopy(HloInstruction* copy,
+                    HloInstruction* /*operand*/) override {
     return DefaultAction(copy);
   }
   Status HandleSelect(HloInstruction* select, HloInstruction* /*pred*/,

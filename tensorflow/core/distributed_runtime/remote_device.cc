@@ -29,6 +29,8 @@ limitations under the License.
 
 namespace tensorflow {
 
+using std::placeholders::_1;
+
 // TODO(zhifengc): We need to consolidate (full/partial) device name
 // parsing into one place.
 //

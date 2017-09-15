@@ -11,8 +11,18 @@ exports_files(["LICENSE"])
 libxsmm_interface_arguments = "0 1"
 
 # Arguments to ./scripts/libxsmm_config.py, see that file for detailed description.
-# rely on default arguments
-libxsmm_config_arguments = ""
+#  ilp64: 0 (no)
+#  big: 1 (yes)
+#  offload: 0 (no)
+#  alignment [b]
+#  prefetch: -1 (auto)
+#  threshold: 0 (auto)
+#  synchronize: yes
+#  jit: 1 (yes)
+#  flags: 0 (none)
+#  alpha = 1
+#  beta = 1
+libxsmm_config_arguments = "0 1 0 64 -1 0 1 1 0 1 1"
 
 # Arguments to ./scripts/libxsmm_dispatch.py, see that file for detailed description.
 #  (dummy argument)
@@ -56,8 +66,6 @@ cc_library(
         "src/libxsmm_dnn_convolution_winograd_weight_update.c",
         "src/libxsmm_dnn_handle.c",
         "src/libxsmm_dump.c",
-        "src/libxsmm_ext_gemm.c",
-        "src/libxsmm_ext_trans.c",
         "src/libxsmm_fsspmdm.c",
         "src/libxsmm_gemm.c",
         "src/libxsmm_main.c",
@@ -84,9 +92,6 @@ cc_library(
         "include/libxsmm_sync.h",
         "include/libxsmm_timer.h",
         "include/libxsmm_typedefs.h",
-        # Source files #included internally:
-        "src/libxsmm_gemm_diff.c",
-        "src/libxsmm_hash.c",
         # Generated:
         "include/libxsmm.h",
         "include/libxsmm_config.h",

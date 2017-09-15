@@ -98,13 +98,7 @@ double CalculateFlopsToBytesRatio(HloInstruction* fusion) {
   // Calculate total bytes transferred in/out.
   double bytes = CalculateBytesReadByFusionInstruction(fusion);
   // Add bytes written to root instructions buffer.
-  if (fusion->IsMultiOutputFusion()) {
-    for (auto& operand : fusion->fused_expression_root()->operands()) {
-      bytes += ShapeUtil::ByteSizeOf(operand->shape());
-    }
-  } else {
-    bytes += ShapeUtil::ByteSizeOf(fusion->fused_expression_root()->shape());
-  }
+  bytes += ShapeUtil::ByteSizeOf(fusion->fused_expression_root()->shape());
   // Calculate flops for all fused instructions. Use a null shape size function
   // because we don't care about bytes accessed by the ops.
   HloCostAnalysis analysis([](const Shape& shape) { return 0; });
@@ -118,15 +112,8 @@ double CalculateFlopsToBytesRatio(HloInstruction* fusion) {
 double GetCurrentBytesTransferred(HloInstruction* fusion) {
   CHECK_EQ(HloOpcode::kFusion, fusion->opcode());
   const double bytes_read = CalculateBytesReadByFusionInstruction(fusion);
-  double bytes_written = 0;
-  if (fusion->IsMultiOutputFusion()) {
-    for (auto& operand : fusion->fused_expression_root()->operands()) {
-      bytes_written += ShapeUtil::ByteSizeOf(operand->shape());
-    }
-  } else {
-    bytes_written =
-        ShapeUtil::ByteSizeOf(fusion->fused_expression_root()->shape());
-  }
+  const double bytes_written =
+      ShapeUtil::ByteSizeOf(fusion->fused_expression_root()->shape());
   // Current bytes transferred (ignoring non 'fusion' user operands) is bytes
   // read and written by 'fusion', plus reads of size 'bytes_written' for each
   // user.
@@ -211,12 +198,6 @@ Status FusionInstructionMerger::HandleFusion(HloInstruction* fusion) {
     ++num_fail_not_loop_fusion_;
     return Status::OK();
   }
-
-  // Skip multiple output fusion. It's not yet supported.
-  if (fusion->IsMultiOutputFusion()) {
-    ++num_fail_not_loop_fusion_;
-    return Status::OK();
-  }
   // Skip 'fusion' instruction if we cannot merge into all of its users.
   // Merging into all users enables the removal of 'fusion' from the
   // computation.
@@ -293,19 +274,12 @@ Status FusionInstructionMerger::HandleFusion(HloInstruction* fusion) {
 StatusOr<bool> FusionMerger::Run(HloModule* module) {
   bool changed = false;
   VLOG(2) << "FusionMerger for module: " << module->name();
-  std::vector<HloComputation*> computations;
   for (auto& computation : module->computations()) {
-    if (computation->IsFusionComputation()) {
-      continue;
-    }
-    computations.push_back(computation.get());
-  }
-  for (auto& computation : computations) {
     VLOG(1) << "Before running FusionInstructionMerger for computation: "
             << computation->name();
     XLA_VLOG_LINES(3, computation->ToString());
 
-    FusionInstructionMerger fusion_merger(computation);
+    FusionInstructionMerger fusion_merger(computation.get());
     TF_RETURN_IF_ERROR(fusion_merger.Run());
     changed |= fusion_merger.changed();
 

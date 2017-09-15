@@ -150,7 +150,7 @@ void MetricTableReport::AppendCategoryTable() {
 
     // Show the category.
     string text = category.category_text;
-    if (text.empty()) {
+    if (text == "") {
       text = "[no category]";
     }
     tensorflow::strings::StrAppend(&text, " (", category.entries.size(), " ",
@@ -200,7 +200,7 @@ void MetricTableReport::AppendEntryTable() {
     metric_sum += entry.metric;
 
     string text = entry.text;
-    if (text.empty()) {
+    if (text == "") {
       text = "[no entry text]";
     }
     AppendTableRow(text, entry.metric, metric_sum);
@@ -220,14 +220,7 @@ void MetricTableReport::AppendTableRow(const string& text, const double metric,
   const int64 max_metric_string_size =
       MetricString(expected_metric_sum_).size();
   string metric_string = MetricString(metric);
-
-  // Don't try to make a gigantic string and crash if expected_metric_sum_ is
-  // wrong somehow.
-  int64 padding_len = 1;
-  if (max_metric_string_size >= metric_string.size()) {
-    padding_len += max_metric_string_size - metric_string.size();
-  }
-  string padding(padding_len, ' ');
+  string padding(max_metric_string_size - metric_string.size() + 1, ' ');
   AppendLine(padding, metric_string, " (", MetricPercent(metric), " Σ",
              MetricPercent(running_metric_sum), ")   ", text);
 }

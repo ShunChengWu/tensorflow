@@ -76,7 +76,7 @@ Status TypeForPlaceholder(const TransformFuncContext& context,
 
 // Takes a comma-separated string of numbers and parses them into a shape.
 bool TensorShapeFromString(const string& shape_string, TensorShape* result) {
-  if (shape_string.empty()) {
+  if (shape_string == "") {
     return false;
   }
   std::vector<int64> dims;
@@ -190,7 +190,7 @@ Status StripUnusedNodes(const GraphDef& input_graph_def,
     if (input_nodes.count(node.name())) {
       NodeDef placeholder_node;
       if (node.op() == "Placeholder") {
-        placeholder_node = node;
+        placeholder_node.CopyFrom(node);
       } else {
         placeholder_node.set_op("Placeholder");
         placeholder_node.set_name(node.name());

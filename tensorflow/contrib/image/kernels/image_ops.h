@@ -66,13 +66,7 @@ class ProjectiveGenerator {
         projection;
 
     // TODO(ringwalt): Add a fill value input.
-#if (defined __CUDA_ARCH__) && (CUDART_VERSION < 8000)
-    // On CUDA versions previous to 8.0, only __shared__ variables
-    // could be declared as static in the device code.
-    const T fill_value = T(0);
-#else
     static const T fill_value = T(0);
-#endif
     switch (interpolation_) {
       case INTERPOLATION_NEAREST:
         // Switch the order of x and y again for indexing into the image.
@@ -82,9 +76,6 @@ class ProjectiveGenerator {
         return bilinear_interpolation(coords[0], input_y, input_x, coords[3],
                                       fill_value);
     }
-    // Unreachable; ImageProjectiveTransform only uses INTERPOLATION_NEAREST
-    // or INTERPOLATION_BILINEAR.
-    return T(0);
   }
 
  private:

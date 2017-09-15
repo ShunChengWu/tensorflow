@@ -26,6 +26,7 @@ RUN apt-get update
 RUN apt-get install -y \
     curl \
     python \
+    python-numpy \
     python-pip \
     && \
     apt-get clean && \

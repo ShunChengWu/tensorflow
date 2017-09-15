@@ -10,11 +10,11 @@ exports_files(["LICENSE"])
 
 load(
     "//tensorflow:tensorflow.bzl",
+    "tf_cuda_cc_test",
     "tf_custom_op_library",
     "tf_gen_op_libs",
     "tf_gen_op_wrapper_py",
 )
-load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
 load("//tensorflow:tensorflow.bzl", "cuda_py_test")
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
 load("//tensorflow:tensorflow.bzl", "tf_kernel_library")
@@ -45,16 +45,11 @@ tf_cuda_cc_test(
         ],
         [],
     ),
-    # Disabled on jenkins until errors finding nvmlShutdown are found.
-    tags = [
-        "manual",
-        "no_oss",
-        "noguitar",  # note: is run manually there
-        "notap",
-    ],
+    tags = ["manual"],  # Disabled until errors finding nvmlShutdown are found.
     deps = if_cuda(
         [
             "@nccl_archive//:nccl",
+            "//tensorflow/core",
             "//tensorflow/core:cuda",
         ],
         [],
@@ -126,12 +121,9 @@ cuda_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:platform_test",
     ],
-    # Disabled on jenkins until errors finding nvmlShutdown are found.
     tags = [
         "manual",
-        "no_oss",
-        "noguitar",  # note: is run manually there
-        "notap",
+        "requires_cudnn5",
     ],
 )
 

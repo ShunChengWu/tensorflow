@@ -15,6 +15,7 @@
 #include "tensorflow/contrib/tensor_forest/kernels/tree_utils.h"
 #include <algorithm>
 #include <cfloat>
+#include "tensorflow/core/lib/random/distribution_sampler.h"
 #include "tensorflow/core/lib/random/philox_random.h"
 #include "tensorflow/core/platform/logging.h"
 
@@ -215,6 +216,8 @@ bool BestSplitDominatesRegression(
   return false;
 }
 
+// We return the Gini Impurity of the bootstrap sample as an int rather
+// than a float, so that we can more easily check for ties.
 int BootstrapGini(int n, int s, const random::DistributionSampler& ds,
                   random::SimplePhilox* rand) {
   std::vector<int> counts(s, 0);

@@ -10,10 +10,7 @@ load(
 
 py_binary(
     name = "tf_upgrade",
-    srcs = [
-        "ast_edits.py",
-        "tf_upgrade.py",
-    ],
+    srcs = ["tf_upgrade.py"],
     srcs_version = "PY2AND3",
 )
 
@@ -23,9 +20,7 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         "tf_upgrade",
-        "//tensorflow/python:client_testlib",
-        "//tensorflow/python:framework_test_lib",
-        "@six_archive//:six",
+        "//tensorflow:tensorflow_py",
     ],
 )
 

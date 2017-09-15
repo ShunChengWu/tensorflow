@@ -28,10 +28,6 @@ namespace xla {
 Computation CreateScalarAddComputation(PrimitiveType type,
                                        ComputationBuilder* builder);
 
-// Creates a scalar multiply computation and returns it.
-Computation CreateScalarMultiplyComputation(PrimitiveType type,
-                                            ComputationBuilder* builder);
-
 // Creates a scalar ge computation and returns it.
 Computation CreateScalarGeComputation(PrimitiveType type,
                                       ComputationBuilder* builder);

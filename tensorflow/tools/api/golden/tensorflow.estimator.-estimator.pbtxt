@@ -11,10 +11,6 @@ tf_class {
     mtype: "<type \'property\'>"
   }
   member {
-    name: "model_fn"
-    mtype: "<type \'property\'>"
-  }
-  member {
     name: "params"
     mtype: "<type \'property\'>"
   }

@@ -20,8 +20,8 @@ limitations under the License.
 
 #include <vector>
 
-#include "tensorflow/compiler/tf2xla/xla_compilation_device.h"
 #include "tensorflow/compiler/tf2xla/xla_compiler.h"
+#include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 #include "tensorflow/compiler/xla/client/computation.h"
 #include "tensorflow/compiler/xla/client/computation_builder.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
@@ -31,16 +31,40 @@ limitations under the License.
 
 namespace tensorflow {
 
-class XlaOpKernelContext;
-
 // The XlaContext is the data structure that holds the state of an XLA
 // compilation, that is accessible from OpKernelContexts when compiling a
 // subgraph of Ops using XLA.
 class XlaContext : public ResourceBase {
  public:
+  // A struct that represents either a compile-time constant, or an XLA
+  // computation handle. Used to represent arguments and return values.
+  struct HandleOrConstant {
+    // Is this a compile-time constant? If so, what is its value?
+    bool is_constant;
+    Tensor constant_value;  // Must be in host memory.
+
+    // If this is not a constant, a computation handle. Since the mapping from
+    // Tensorflow types to XLA types is not necessarily injective (one-to-one),
+    // we also require the Tensorflow type.
+    DataType type;
+    xla::ComputationDataHandle handle;
+  };
+
+  struct Argument {
+    // Descriptive name for the variable, for use in error messages.
+    string name;
+
+    // Is this a variable?
+    bool is_variable;
+
+    HandleOrConstant value;
+  };
+
   // Retrieves the XlaContext of the current compilation.
   static XlaContext& Get(const OpKernelContext* ctx);
-  static XlaContext& Get(const XlaOpKernelContext* ctx);
+  static XlaContext& Get(const XlaOpKernelContext* ctx) {
+    return Get(ctx->op_kernel_context());
+  }
 
   // Creates a new XlaContext.
   XlaContext(XlaCompiler* compiler, xla::ComputationBuilder* builder,
@@ -58,14 +82,14 @@ class XlaContext : public ResourceBase {
   bool allow_cpu_custom_calls() const { return allow_cpu_custom_calls_; }
   bool has_context_parameter() const { return has_context_parameter_; }
 
-  const std::vector<XlaExpression>& args() const { return args_; }
-  void set_args(std::vector<XlaExpression> args);
+  const std::vector<Argument>& args() const { return args_; }
+  void set_args(std::vector<Argument> args);
 
   // Get the runtime context parameter, adding one if it does not already exist.
   // Dies if not compiling a local executable.
   const xla::ComputationDataHandle& GetOrCreateRuntimeContextParameter();
 
-  const std::vector<XlaExpression>& retvals() { return retvals_; }
+  const std::vector<HandleOrConstant>& retvals() { return retvals_; }
 
   // This is called by the Retval Op to associate a computed value
   // with a specific return value of the subgraph.
@@ -81,16 +105,33 @@ class XlaContext : public ResourceBase {
 
   bool has_side_effects() const { return has_side_effects_; }
 
-  // Creates a resource with resource `kind` and initial type `type` and
-  // value `handle`. `name` is a descriptive name for use in error messages.
-  // Fails if the resource already exists.
-  Status CreateResource(XlaResource::Kind kind, int arg_num, string name,
-                        DataType type, const xla::ComputationDataHandle& handle,
-                        XlaResource** resource);
+  struct Variable {
+    // A descriptive name for the variable, used in error messages.
+    string name;
 
-  const std::vector<std::unique_ptr<XlaResource>>& resources() {
-    return resources_;
-  }
+    // Current type and value of the variable. Uninitialized variables are
+    // represented by a default (zero) handle and type DT_INVALID.
+    // While the type of a variable is notionally fixed during execution, when
+    // a variable is first initialized we do not yet know its type, so we keep
+    // track of its type dynamically.
+    DataType type = DT_INVALID;
+    xla::ComputationDataHandle value;
+
+    // Value of the variable at computation entry. Used to detect which
+    // variables have new values that need to be written back.
+    xla::ComputationDataHandle initial_value;
+  };
+
+  // Creates a variable with variable `variable_id` and initial type `type` and
+  // value `handle`. `name` is a descriptive name for use in error messages.
+  // Fails if the variable already exists.
+  Status CreateVariable(int variable_id, string name, DataType type,
+                        const xla::ComputationDataHandle& handle);
+
+  // Retrieves variable `variable_id`. Fails if the variable does not exist.
+  Status GetVariable(int variable_id, Variable** variable);
+
+  const std::unordered_map<int, Variable>& variables() { return variables_; }
 
   // Get an XLA lambda to compute Max. This is cached in the
   // XlaContext since it may be used by multiple Ops. There is a
@@ -101,6 +142,11 @@ class XlaContext : public ResourceBase {
   // XlaContext since it may be used by multiple Ops. There is a
   // separate specialization of the computation for each DataType.
   const xla::Computation* GetOrCreateAdd(const DataType type);
+
+  // Get an XLA lambda to compute Sigmoid. This is cached in the
+  // XlaContext since it may be used by multiple Ops. There is a
+  // separate specialization of the computation for each DataType.
+  const xla::Computation* GetOrCreateSigmoid(const DataType type);
 
   // The name of the XlaContext resource during symbolic graph execution.
   static const char kXlaContextResourceName[];
@@ -128,16 +174,16 @@ class XlaContext : public ResourceBase {
 
   // Arguments to the Tensorflow graph, indexed by _Arg index.
   // Includes both compile-time constant arguments and runtime parameters.
-  std::vector<XlaExpression> args_;
+  std::vector<Argument> args_;
 
   // Return values of the Tensorflow graph, indexed by _Retval index.
-  std::vector<XlaExpression> retvals_;
+  std::vector<HandleOrConstant> retvals_;
 
   // Does the computation have side effects, i.e., Send() calls?
   bool has_side_effects_ = false;
 
-  // Holds ownership of resources. The resources are not ordered.
-  std::vector<std::unique_ptr<XlaResource>> resources_;
+  // Map from variable ID to the current value of each variable.
+  std::unordered_map<int, Variable> variables_;
 
   // Cache of prebuilt computations indexed by their type.
   using ComputationMap = std::map<DataType, xla::Computation>;

@@ -42,28 +42,23 @@ For more specific needs, you can create custom hooks:
       print('Starting the session.')
       self.your_tensor = ...
 
-    def after_create_session(self, session, coord):
-      # When this is called, the graph is finalized and
-      # ops can no longer be added to the graph.
-      print('Session created.')
+    def end(self, session):
+      print('Done with the session.')
 
     def before_run(self, run_context):
-      print('Before calling session.run().')
+      print('before calling session.run)
       return SessionRunArgs(self.your_tensor)
 
-    def after_run(self, run_context, run_values):
+    def after_run(self, run_context, run_values)
       print('Done running one step. The value of my tensor: %s',
             run_values.results)
       if you-need-to-stop-loop:
         run_context.request_stop()
 
-    def end(self, session):
-      print('Done with the session.')
-
 To understand how hooks interact with calls to `MonitoredSession.run()`,
 look at following code:
-  with MonitoredTrainingSession(hooks=your_hooks, ...) as sess:
-    while not sess.should_stop():
+  with SupervisedSession(hooks=your_hooks, ...) as sess
+    while not sess.should_stop()
       sess.run(your_fetches)
 
 Above user code leads to following execution:
@@ -73,7 +68,7 @@ Above user code leads to following execution:
   while not stop is requested:
     call hooks.before_run()
     try:
-      results = sess.run(merged_fetches, feed_dict=merged_feeds)
+      results = sess.run(merged_fetches)
     except (errors.OutOfRangeError, StopIteration):
       break
     call hooks.after_run()

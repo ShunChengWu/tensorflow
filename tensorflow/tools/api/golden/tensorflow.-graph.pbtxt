@@ -7,10 +7,6 @@ tf_class {
     mtype: "<type \'property\'>"
   }
   member {
-    name: "collections"
-    mtype: "<type \'property\'>"
-  }
-  member {
     name: "finalized"
     mtype: "<type \'property\'>"
   }

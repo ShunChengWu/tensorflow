@@ -13,9 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <memory>
 #include <vector>
-
 #include "tensorflow/core/framework/function_testlib.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/tensor_testutil.h"
@@ -23,16 +21,17 @@ limitations under the License.
 #include "tensorflow/core/public/session.h"
 
 namespace tensorflow {
-namespace {
 
 namespace f = test::function;
-using FDH = FunctionDefHelper;
+typedef FunctionDefHelper FDH;
 
-std::unique_ptr<Session> NewSession() {
+namespace {
+Session* NewSession() {
   SessionOptions opts;
   (*opts.config.mutable_device_count())["CPU"] = 1;
-  return std::unique_ptr<Session>(NewSession(opts));
+  return NewSession(opts);
 }
+}  // end namespace
 
 class MathGradTest : public ::testing::Test {
  protected:
@@ -86,6 +85,7 @@ class MathGradTest : public ::testing::Test {
       *y = outputs[0];
     }
     TF_CHECK_OK(sess->Close());
+    delete sess;
     return s;
   }
 
@@ -148,6 +148,7 @@ class MathGradTest : public ::testing::Test {
         sess->Run({{"x:0", x}, {"y:0", y}}, {"d:0", "d:1"}, {}, &outputs));
     CHECK_EQ(outputs.size(), 2);
     TF_CHECK_OK(sess->Close());
+    delete sess;
     *dx = outputs[0];
     *dy = outputs[1];
   }
@@ -203,6 +204,7 @@ class MathGradTest : public ::testing::Test {
         sess->Run({{"x:0", x}, {"i:0", idx}}, {"d:0", "d:1"}, {}, &outputs));
     CHECK_EQ(outputs.size(), 2);
     TF_CHECK_OK(sess->Close());
+    delete sess;
     *dx = outputs[0];
     *di = outputs[1];
   }
@@ -225,6 +227,7 @@ class MathGradTest : public ::testing::Test {
     TF_CHECK_OK(sess->Run({{"x:0", x}, {"y:0", y}}, {"z:0"}, {}, &outputs));
     CHECK_EQ(outputs.size(), 1);
     TF_CHECK_OK(sess->Close());
+    delete sess;
     return outputs[0];
   }
 
@@ -292,6 +295,7 @@ class MathGradTest : public ::testing::Test {
         sess->Run({{"x:0", x}, {"y:0", y}}, {"d:0", "d:1"}, {}, &outputs));
     CHECK_EQ(outputs.size(), 2);
     TF_CHECK_OK(sess->Close());
+    delete sess;
     *dx = outputs[0];
     *dy = outputs[1];
   }
@@ -355,13 +359,14 @@ class MathGradTest : public ::testing::Test {
                           {"d:0", "d:1", "d:2"}, {}, &outputs));
     CHECK_EQ(outputs.size(), 3);
     TF_CHECK_OK(sess->Close());
+    delete sess;
     *dc = outputs[0];
     *dx = outputs[1];
     *dy = outputs[2];
   }
 };
 
-void HasError(const Status& s, const string& substr) {
+static void HasError(const Status& s, const string& substr) {
   EXPECT_TRUE(StringPiece(s.ToString()).contains(substr))
       << s << ", expected substring " << substr;
 }
@@ -495,26 +500,6 @@ TEST_F(MathGradTest, Log1p) {
   test::ExpectClose(ans, dx);
 }
 
-TEST_F(MathGradTest, Sinh) {
-  auto x = test::AsTensor<float>({-3.f, -2.f, -1.f, 1.f, 2.f, 3.f},
-                                 TensorShape({2, 3}));
-  auto g = [](float x) { return std::cosh(x); };
-  auto dx = test::AsTensor<float>(
-      {g(-3.f), g(-2.f), g(-1.f), g(1.f), g(2.f), g(3.f)}, TensorShape({2, 3}));
-  auto ans = SymGrad("Sinh", x);
-  test::ExpectClose(ans, dx);
-}
-
-TEST_F(MathGradTest, Cosh) {
-  auto x = test::AsTensor<float>({-3.f, -2.f, -1.f, 1.f, 2.f, 3.f},
-                                 TensorShape({2, 3}));
-  auto g = [](float x) { return std::sinh(x); };
-  auto dx = test::AsTensor<float>(
-      {g(-3.f), g(-2.f), g(-1.f), g(1.f), g(2.f), g(3.f)}, TensorShape({2, 3}));
-  auto ans = SymGrad("Cosh", x);
-  test::ExpectClose(ans, dx);
-}
-
 TEST_F(MathGradTest, Tanh) {
   auto x = test::AsTensor<float>({-3.f, -2.f, -1.f, 1.f, 2.f, 3.f},
                                  TensorShape({2, 3}));
@@ -525,44 +510,6 @@ TEST_F(MathGradTest, Tanh) {
   auto dx = test::AsTensor<float>(
       {g(-3.f), g(-2.f), g(-1.f), g(1.f), g(2.f), g(3.f)}, TensorShape({2, 3}));
   auto ans = SymGrad("Tanh", x);
-  test::ExpectClose(ans, dx);
-}
-
-TEST_F(MathGradTest, Asinh) {
-  auto x = test::AsTensor<float>({-3.f, -2.f, -1.f, 1.f, 2.f, 3.f},
-                                 TensorShape({2, 3}));
-  auto g = [](float x) {
-    auto y = std::asinh(x);
-    return std::cosh(y);
-  };
-  auto dx = test::AsTensor<float>(
-      {g(-3.f), g(-2.f), g(-1.f), g(1.f), g(2.f), g(3.f)}, TensorShape({2, 3}));
-  auto ans = SymGrad("Asinh", x);
-  test::ExpectClose(ans, dx);
-}
-
-TEST_F(MathGradTest, Acosh) {
-  auto x = test::AsTensor<float>({6.f, 5.f, 4.f, 1.f, 2.f, 3.f},
-                                 TensorShape({2, 3}));
-  auto g = [](float x) {
-    auto y = std::acosh(x);
-    return std::sinh(y);
-  };
-  auto dx = test::AsTensor<float>(
-      {g(6.f), g(5.f), g(4.f), g(1.f), g(2.f), g(3.f)}, TensorShape({2, 3}));
-  auto ans = SymGrad("Acosh", x);
-  test::ExpectClose(ans, dx);
-}
-
-TEST_F(MathGradTest, Atanh) {
-  auto x = test::AsTensor<float>({-0.3f, -0.2f, -0.1f, 0.1f, 0.2f, 0.3f},
-                                 TensorShape({2, 3}));
-  auto g = [](float x) {
-    return 1.f / (1.f - x * x);
-  };
-  auto dx = test::AsTensor<float>(
-      {g(-0.3f), g(-0.2f), g(-0.1f), g(0.1f), g(0.2f), g(0.3f)}, TensorShape({2, 3}));
-  auto ans = SymGrad("Atanh", x);
   test::ExpectClose(ans, dx);
 }
 
@@ -612,7 +559,6 @@ TEST_F(MathGradTest, Cos) {
 // TODO(zhifengc)
 // TEST_F(MathGradSComplexTest, Real) {}
 // TEST_F(MathGradSComplexTest, Imag) {}
-// TEST_F(MathGradSComplexTest, Angle) {}
 // TEST_F(MathGradSComplexTest, Conj) {}
 // TEST_F(MathGradTernary, Select) {}
 
@@ -1180,5 +1126,4 @@ TEST_F(MathGradTest, Max_dim0_dim1_Dups) {
       di, test::AsTensor<int32>({0, 0}, TensorShape({2})));
 }
 
-}  // namespace
-}  // namespace tensorflow
+}  // end namespace tensorflow

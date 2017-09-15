@@ -50,7 +50,7 @@ class MeasuringCostEstimator : public CostEstimator {
                                   int measurement_threads);
   ~MeasuringCostEstimator() override {}
 
-  // Initializes the estimator for the specified grappler item.
+  // Initalizes the estimator for the specified grappler item.
   // This implementation always returns OK.
   Status Initialize(const GrapplerItem& item) override;
 

@@ -39,7 +39,7 @@ typedef Eigen::GpuDevice GPUDevice;
 
 class AdjustHueOpBase : public OpKernel {
  protected:
-  explicit AdjustHueOpBase(OpKernelConstruction* context) : OpKernel(context) {}
+  AdjustHueOpBase(OpKernelConstruction* context) : OpKernel(context) {}
 
   struct ComputeOptions {
     const Tensor* input;
@@ -255,8 +255,8 @@ class AdjustHueOp<GPUDevice> : public AdjustHueOpBase {
   explicit AdjustHueOp(OpKernelConstruction* context)
       : AdjustHueOpBase(context) {}
 
-  void DoCompute(OpKernelContext* context,
-                 const ComputeOptions& options) override {
+  virtual void DoCompute(OpKernelContext* context,
+                         const ComputeOptions& options) override {
     const Tensor* input = options.input;
     const Tensor* delta = options.delta;
     Tensor* output = options.output;

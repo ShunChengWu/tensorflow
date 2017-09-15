@@ -21,7 +21,7 @@ limitations under the License.
 
 namespace xla {
 
-// A pass which performs constant folding in order to avoid unnecessary
+// A pass which performs constant folding in order to avoid unecessary
 // computation on constants.
 class HloConstantFolding : public HloPassInterface {
  public:

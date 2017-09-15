@@ -17,8 +17,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.core.protobuf import config_pb2
-from tensorflow.core.protobuf import rewriter_config_pb2
 from tensorflow.python.client import session
 from tensorflow.python.debug.lib.stepper import NodeStepper
 from tensorflow.python.framework import constant_op
@@ -54,11 +52,7 @@ class StepperTest(test_util.TensorFlowTestCase):
 
     self.z = math_ops.multiply(self.x, self.y, name="z")  # Should be -4.0.
 
-    rewriter_config = rewriter_config_pb2.RewriterConfig(
-        disable_model_pruning=True)
-    graph_options = config_pb2.GraphOptions(rewrite_options=rewriter_config)
-    config = config_pb2.ConfigProto(graph_options=graph_options)
-    self.sess = session.Session(config=config)
+    self.sess = session.Session()
     self.sess.run(variables.global_variables_initializer())
 
   def tearDown(self):
@@ -401,7 +395,7 @@ class StepperTest(test_util.TensorFlowTestCase):
       elif i == 5:
         fetches = {"e": "e:0", "fz": {"f": "f:0", "z": "z:0"}}
 
-      with NodeStepper(self.sess, fetches) as stepper:
+      with  NodeStepper(self.sess, fetches) as stepper:
         sorted_nodes = stepper.sorted_nodes()
         self.assertEqual(13, len(sorted_nodes))
 
@@ -587,11 +581,7 @@ class StepperAssignAddTest(test_util.TensorFlowTestCase):
                                        1.0,
                                        name="v_add_plus_one")
 
-    rewriter_config = rewriter_config_pb2.RewriterConfig(
-        disable_model_pruning=True)
-    graph_options = config_pb2.GraphOptions(rewrite_options=rewriter_config)
-    config = config_pb2.ConfigProto(graph_options=graph_options)
-    self.sess = session.Session(config=config)
+    self.sess = session.Session()
     self.sess.run(self.v.initializer)
 
   def tearDown(self):
@@ -601,7 +591,7 @@ class StepperAssignAddTest(test_util.TensorFlowTestCase):
     with NodeStepper(self.sess, [self.q, self.v_add]) as stepper:
       self.assertIsNone(stepper.last_updated())
 
-  def testContToUpdateInvalidatesDumpedIntermediates(self):
+  def testContToUpdateInvalidatesDumpedIntermedates(self):
     with NodeStepper(self.sess, [self.q, self.v_add]) as stepper:
       self.assertAllClose(400.0, stepper.cont("q:0"))
       self.assertItemsEqual(["v/read:0", "p:0"],
@@ -718,11 +708,7 @@ class StepperBackwardRunTest(test_util.TensorFlowTestCase):
     gradient_descent.GradientDescentOptimizer(0.01).minimize(
         self.f, name="optim")
 
-    rewriter_config = rewriter_config_pb2.RewriterConfig(
-        disable_model_pruning=True)
-    graph_options = config_pb2.GraphOptions(rewrite_options=rewriter_config)
-    config = config_pb2.ConfigProto(graph_options=graph_options)
-    self.sess = session.Session(config=config)
+    self.sess = session.Session()
     self.sess.run(variables.global_variables_initializer())
 
   def tearDown(self):

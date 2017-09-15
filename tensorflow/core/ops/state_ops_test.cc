@@ -63,41 +63,49 @@ TEST(StateOpsTest, ScatterUpdate_ShapeFn) {
 TEST(StateOpsTest, TemporaryVariable_ShapeFn) {
   ShapeInferenceTestOp op("TemporaryVariable");
   TensorShape shape({1, 2, 3});
+  TensorShapeProto shape_proto;
+  shape.AsProto(&shape_proto);
   TF_ASSERT_OK(NodeDefBuilder("test", "TemporaryVariable")
-                   .Attr("shape", shape)
+                   .Attr("shape", shape_proto)
                    .Finalize(&op.node_def));
   INFER_OK(op, "", "[1,2,3]");
 }
 
 TEST(StateOpsTest, Variable_ShapeFn) {
   ShapeInferenceTestOp op("Variable");
+  TensorShapeProto shape_proto;
 
   // Unknown rank.
+  PartialTensorShape().AsProto(&shape_proto);
   TF_ASSERT_OK(NodeDefBuilder("test", "Variable")
-                   .Attr("shape", PartialTensorShape())
+                   .Attr("shape", shape_proto)
                    .Finalize(&op.node_def));
   INFER_OK(op, "", "?");
 
   // For historical reasons an empty TensorShapeProto can be either an unknown
   // rank or a scalar, so the shape function conservatively says "unknown"
+  shape_proto.Clear();
   TF_ASSERT_OK(NodeDefBuilder("test", "Variable")
-                   .Attr("shape", TensorShape({}))
+                   .Attr("shape", shape_proto)
                    .Finalize(&op.node_def));
   INFER_OK(op, "", "?");
 
   // Specified shape.
+  TensorShape({1, 2, 3}).AsProto(&shape_proto);
   TF_ASSERT_OK(NodeDefBuilder("test", "Variable")
-                   .Attr("shape", TensorShape({1, 2, 3}))
+                   .Attr("shape", shape_proto)
                    .Finalize(&op.node_def));
   INFER_OK(op, "", "[1,2,3]");
 }
 
 TEST(StateOpsTest, VariableV2_ShapeFn) {
   ShapeInferenceTestOp op("VariableV2");
+  TensorShapeProto shape_proto;
 
   // Unknown rank.
+  shape_proto.set_unknown_rank(true);
   TF_ASSERT_OK(NodeDefBuilder("test", "VariableV2")
-                   .Attr("shape", PartialTensorShape())
+                   .Attr("shape", shape_proto)
                    .Finalize(&op.node_def));
   INFER_OK(op, "", "?");
 
@@ -108,8 +116,9 @@ TEST(StateOpsTest, VariableV2_ShapeFn) {
   INFER_OK(op, "", "[]");
 
   // Specified shape.
+  TensorShape({1, 2, 3}).AsProto(&shape_proto);
   TF_ASSERT_OK(NodeDefBuilder("test", "VariableV2")
-                   .Attr("shape", TensorShape({1, 2, 3}))
+                   .Attr("shape", shape_proto)
                    .Finalize(&op.node_def));
   INFER_OK(op, "", "[1,2,3]");
 }

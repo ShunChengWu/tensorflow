@@ -17,13 +17,13 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "llvm/ADT/StringRef.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
+#include "external/llvm/include/llvm/ADT/StringRef.h"
+#include "external/llvm/include/llvm/IR/BasicBlock.h"
+#include "external/llvm/include/llvm/IR/Function.h"
+#include "external/llvm/include/llvm/IR/IRBuilder.h"
+#include "external/llvm/include/llvm/IR/Instructions.h"
+#include "external/llvm/include/llvm/IR/LLVMContext.h"
+#include "external/llvm/include/llvm/IR/Module.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/ptr_util.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
@@ -33,7 +33,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/gpu/for_thunk.h"
 #include "tensorflow/compiler/xla/service/gpu/gemm_thunk.h"
 #include "tensorflow/compiler/xla/service/gpu/hlo_to_ir_bindings.h"
-#include "tensorflow/compiler/xla/service/gpu/infeed_thunk.h"
 #include "tensorflow/compiler/xla/service/gpu/ir_emission_utils.h"
 #include "tensorflow/compiler/xla/service/gpu/ir_emitter.h"
 #include "tensorflow/compiler/xla/service/gpu/ir_emitter_context.h"
@@ -164,7 +163,7 @@ llvm::Function* IrEmitterUnnested::BuildKernelPrototype(
   // Compute the kernel name. The opcode string may contain "-" which cannot be
   // in a PTX function name, so sanitize the name before uniquifying it.
   string kernel_name = ir_emitter_context_->name_uniquer()->GetUniqueName(
-      llvm_ir::SanitizeFunctionName(inst.name()));
+      llvm_ir::SanitizeIrName(inst.name()));
 
   // Create the kernel and adds it to the module.
   llvm::Module* module = ir_emitter_context_->llvm_module();
@@ -193,16 +192,11 @@ llvm::Function* IrEmitterUnnested::BuildKernelPrototype(
   // the result).  We also know how many bytes can be dereferenced in it.
   const llvm::Argument& temp_buffer = *std::prev(kernel->arg_end());
   int64 temp_buffer_arg_no = temp_buffer.getArgNo();
-  int64 temp_allocation_total_size =
-      ir_emitter_context_->buffer_assignment().temp_allocation_total_size();
-  if (temp_allocation_total_size != 0) {
-    kernel->addDereferenceableAttr(temp_buffer_arg_no + 1,
-                                   temp_allocation_total_size);
+  if (const BufferAllocation* allocation =
+          ir_emitter_context_->buffer_assignment().GetTempAllocation()) {
+    kernel->addDereferenceableAttr(temp_buffer_arg_no + 1, allocation->size());
   }
   kernel->addAttribute(temp_buffer_arg_no + 1, llvm::Attribute::NoAlias);
-
-  // TODO(b/65380986): Investigate if adding fast math flags for generated
-  // kernels makes sense.
 
   // Add the declaration of this kernel to llvm.nvvm.annotations so that NVPTX
   // treats it as a CUDA kernel.
@@ -725,7 +719,8 @@ int64 EmitTranspose021Tiled(llvm_ir::IrArray input, llvm_ir::IrArray output,
 
 }  // namespace
 
-Status IrEmitterUnnested::HandleCopy(HloInstruction* copy) {
+Status IrEmitterUnnested::HandleCopy(HloInstruction* copy,
+                                     HloInstruction* operand) {
   if (ImplementedAsMemcpy(*copy)) {
     thunk_sequence_->emplace_back(BuildCopyThunk(copy));
     return Status::OK();
@@ -733,7 +728,7 @@ Status IrEmitterUnnested::HandleCopy(HloInstruction* copy) {
   bool is_transpose_021;
   Shape reduced_input_shape, reduced_output_shape;
   std::tie(is_transpose_021, reduced_input_shape, reduced_output_shape) =
-      IsTranspose021(copy->operand(0)->shape(), copy->shape());
+      IsTranspose021(operand->shape(), copy->shape());
   if (is_transpose_021 &&
       reduced_input_shape.dimensions(1) >= kMinDimensionToTransposeTiled &&
       reduced_input_shape.dimensions(2) >= kMinDimensionToTransposeTiled) {
@@ -741,8 +736,7 @@ Status IrEmitterUnnested::HandleCopy(HloInstruction* copy) {
     VLOG(3) << "Emitting tiled 0-2-1 transposition";
     constexpr int64 tile_size = 32;
     int64 num_tiles = EmitTranspose021Tiled(
-        GetIrArray(*(copy->operand(0)))
-            .CastToShape(reduced_input_shape, &ir_builder_),
+        GetIrArray(*operand).CastToShape(reduced_input_shape, &ir_builder_),
         GetIrArray(*copy).CastToShape(reduced_output_shape, &ir_builder_),
         tile_size, &ir_builder_);
     UpdateLaunchDimensions(LaunchDimensions(num_tiles, tile_size), LastThunk(),
@@ -750,7 +744,7 @@ Status IrEmitterUnnested::HandleCopy(HloInstruction* copy) {
     return Status::OK();
   }
 
-  return IrEmitter::HandleCopy(copy);
+  return IrEmitter::HandleCopy(copy, operand);
 }
 
 Status IrEmitterUnnested::EmitColumnReduction(
@@ -897,7 +891,7 @@ Status IrEmitterUnnested::EmitColumnReduction(
     llvm_ir::SetToFirstInsertPoint(if_tile_in_bounds_data.after_block,
                                    &ir_builder_);
     const HloInstruction* output =
-        reduce->IsFused() ? reduce->parent()->FusionInstruction() : reduce;
+        reduce->IsFused() ? reduce->fusion_instruction() : reduce;
     llvm::Value* output_address = GetIrArray(*output).EmitArrayElementAddress(
         llvm_ir::IrArray::Index(x, output->shape(), &ir_builder_), &ir_builder_,
         "output_element_address");
@@ -999,7 +993,7 @@ Status IrEmitterUnnested::EmitRowReduction(
   //   for (shuffle_distance = 16; shuffle_distance > 0; shuffle_distance /= 2)
   //     partial_result = Reducer(
   //         partial_result,
-  //         __shfl_down_sync(CUDA_WARP_ALL, partial_result, shuffle_distance));
+  //         __shfl_down(partial_result, shuffle_distance));
   //   if (lane_id == 0)
   //     AtomicReducer(&output[y], partial_result);
   // }
@@ -1145,7 +1139,7 @@ Status IrEmitterUnnested::EmitRowReduction(
     }
 
     const HloInstruction* output =
-        reduce->IsFused() ? reduce->parent()->FusionInstruction() : reduce;
+        reduce->IsFused() ? reduce->fusion_instruction() : reduce;
 
     // Emit an atomic operation that accumulates the partial reduction result of
     // lane 0 (which holds the partially accumulated result for its warp) to the
@@ -1583,11 +1577,6 @@ Status IrEmitterUnnested::HandleSelect(HloInstruction* select,
   return IrEmitter::HandleSelect(select, pred, on_true, on_false);
 }
 
-Status IrEmitterUnnested::HandleInfeed(HloInstruction* infeed) {
-  thunk_sequence_->emplace_back(BuildInfeedThunk(infeed));
-  return Status::OK();
-}
-
 llvm::Function* IrEmitterUnnested::EmitBasePointersForHloAndItsOperands(
     const HloInstruction& hlo, std::vector<const HloInstruction*>* io_hlos) {
   const BufferAssignment& buffer_assignment =
@@ -1636,7 +1625,6 @@ std::unique_ptr<Thunk> IrEmitterUnnested::BuildKernelThunk(
 
   // Compute the input buffer indices.
   std::vector<BufferAllocation::Slice> io_buffers;
-  io_buffers.reserve(io_hlos.size());
   for (const HloInstruction* io_hlo : io_hlos) {
     io_buffers.push_back(GetAllocationSlice(*LatestNonGteAncestor(io_hlo)));
   }
@@ -1651,29 +1639,12 @@ std::unique_ptr<Thunk> IrEmitterUnnested::BuildCopyThunk(
   const HloInstruction* operand = inst->operand(0);
   CHECK_EQ(HloOpcode::kConstant, operand->opcode());
   return MakeUnique<CopyThunk>(
-      /*source_address=*/operand->literal().InternalData(),
+      /*source_address=*/LiteralUtil::InternalData(operand->literal()),
       /*destination_buffer=*/GetAllocationSlice(*inst),
       /*mem_size=*/
       llvm_ir::ByteSizeOf(operand->shape(),
                           ir_emitter_context_->llvm_module()->getDataLayout()),
       inst);
-}
-
-std::unique_ptr<Thunk> IrEmitterUnnested::BuildInfeedThunk(
-    const HloInstruction* inst) {
-  CHECK_EQ(HloOpcode::kInfeed, inst->opcode());
-
-  std::vector<BufferAllocation::Slice> tuple_element_buffers;
-  for (int64 i = 0; i < inst->shape().tuple_shapes_size(); ++i) {
-    BufferAllocation::Slice buffer = ir_emitter_context_->buffer_assignment()
-                                         .GetUniqueSlice(inst, {i})
-                                         .ConsumeValueOrDie();
-    tuple_element_buffers.push_back(buffer);
-  }
-
-  return MakeUnique<InfeedThunk>(
-      tuple_element_buffers,
-      /*destination_buffer=*/GetAllocationSlice(*inst), inst);
 }
 
 std::unique_ptr<Thunk> IrEmitterUnnested::BuildGemmThunk(
@@ -1808,7 +1779,7 @@ namespace {
 Status CheckWhileBuffersShareAllocation(
     const HloInstruction* xla_while,
     const BufferAssignment& buffer_assignment) {
-  return ShapeUtil::ForEachSubshapeWithStatus(
+  return ShapeUtil::ForEachSubshape(
       xla_while->shape(),
       [&buffer_assignment, &xla_while](const Shape& /*subshape*/,
                                        const ShapeIndex& index) -> Status {
@@ -1889,35 +1860,15 @@ std::unique_ptr<Thunk> IrEmitterUnnested::BuildForThunk(
 Status IrEmitterUnnested::EmitTargetElementLoopInThunk(
     const HloInstruction& hlo,
     const llvm_ir::ElementGenerator& element_generator, KernelThunk* thunk) {
-  const Shape& element_shape = hlo.IsMultiOutputFusion()
-                                   ? ShapeUtil::GetSubshape(hlo.shape(), {0})
-                                   : hlo.shape();
   LaunchDimensions launch_dimensions = CalculateLaunchDimensions(
-      element_shape, ir_emitter_context_->device_description());
+      hlo.shape(), ir_emitter_context_->device_description());
   UpdateLaunchDimensions(launch_dimensions, thunk,
                          ir_emitter_context_->llvm_module());
-  if (!hlo.IsMultiOutputFusion()) {
-    return ParallelLoopEmitter(element_generator, GetIrArray(hlo),
-                               launch_dimensions, &ir_builder_)
-        .EmitLoop();
-  }
-
-  // For multiple outputs fusion, we need to emit each operand and the root.
-  std::vector<llvm_ir::IrArray> output_arrays;
-  for (int64 i = 0; i < ShapeUtil::TupleElementCount(hlo.shape()); ++i) {
-    output_arrays.push_back(GetIrArray(hlo, {i}));
-  }
-  TF_RETURN_IF_ERROR(ParallelLoopEmitter(element_generator, output_arrays,
-                                         launch_dimensions, &ir_builder_)
-                         .EmitLoop());
-
-  std::vector<llvm::Value*> tuple_operand_ptrs;
-  for (int64 i = 0; i < output_arrays.size(); ++i) {
-    tuple_operand_ptrs.push_back(output_arrays[i].GetBasePointer());
-  }
-  ir_builder_.SetInsertPoint(ir_builder_.GetInsertBlock()->getTerminator());
-  llvm_ir::EmitTuple(GetIrArray(hlo), tuple_operand_ptrs, &ir_builder_);
-  return Status::OK();
+  // Otherwise, emit a parallel loop that computes the partition that each
+  // thread is in charge of.
+  return ParallelLoopEmitter(element_generator, GetIrArray(hlo),
+                             launch_dimensions, &ir_builder_)
+      .EmitLoop();
 }
 
 Status IrEmitterUnnested::EmitTargetElementLoop(

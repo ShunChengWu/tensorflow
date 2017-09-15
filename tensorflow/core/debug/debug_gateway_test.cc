@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdlib>
-#include <memory>
 #include <unordered_map>
 
 #include "tensorflow/core/debug/debug_graph_utils.h"
@@ -30,15 +29,14 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-std::unique_ptr<DirectSession> CreateSession() {
+DirectSession* CreateSession() {
   SessionOptions options;
   // Turn off graph optimizer so we can observe intermediate node states.
   options.config.mutable_graph_options()
       ->mutable_optimizer_options()
       ->set_opt_level(OptimizerOptions_Level_L0);
 
-  return std::unique_ptr<DirectSession>(
-      dynamic_cast<DirectSession*>(NewSession(options)));
+  return dynamic_cast<DirectSession*>(NewSession(options));
 }
 
 class SessionDebugMinusAXTest : public ::testing::Test {
@@ -47,9 +45,7 @@ class SessionDebugMinusAXTest : public ::testing::Test {
     Graph graph(OpRegistry::Global());
 
 #if GOOGLE_CUDA
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:GPU:0";
-#elif defined(TENSORFLOW_USE_SYCL)
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:SYCL:0";
+    const string kDeviceName = "/job:localhost/replica:0/task:0/gpu:0";
 #else
     const string kDeviceName = "/job:localhost/replica:0/task:0/cpu:0";
 #endif
@@ -87,7 +83,7 @@ class SessionDebugMinusAXTest : public ::testing::Test {
 
 TEST_F(SessionDebugMinusAXTest, RunSimpleNetwork) {
   Initialize({3, 2, -1, 0});
-  auto session = CreateSession();
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
   DebugGateway debug_gateway(session.get());
@@ -222,7 +218,7 @@ TEST_F(SessionDebugMinusAXTest, RunSimpleNetwork) {
 TEST_F(SessionDebugMinusAXTest, RunSimpleNetworkWithTwoDebugNodesInserted) {
   // Tensor contains one count of NaN
   Initialize({3, std::numeric_limits<float>::quiet_NaN(), -1, 0});
-  auto session = CreateSession();
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
   DebugGateway debug_gateway(session.get());
@@ -307,8 +303,6 @@ TEST_F(SessionDebugMinusAXTest, RunSimpleNetworkWithTwoDebugNodesInserted) {
 // through RunMetadata, given whether GPU is involved.
 #if GOOGLE_CUDA
   ASSERT_EQ(2, run_metadata.partition_graphs().size());
-#elif defined(TENSORFLOW_USE_SYCL)
-  ASSERT_EQ(2, run_metadata.partition_graphs().size());
 #else
   ASSERT_EQ(1, run_metadata.partition_graphs().size());
 #endif
@@ -343,7 +337,7 @@ TEST_F(SessionDebugMinusAXTest, RunSimpleNetworkWithTwoDebugNodesInserted) {
   ASSERT_EQ(1, debug_nan_count_tensor_vals[0].scalar<int64>()());
 }
 
-#if !defined(GOOGLE_CUDA) && !defined(TENSORFLOW_USE_SYCL)
+#ifndef GOOGLE_CUDA
 // TODO(cais): Reinstate the following test for concurrent debugged runs on
 //   a GPU once the root cause of the ~0.5% flakiness has been addressed.
 //   (b/34081273)
@@ -352,7 +346,7 @@ TEST_F(SessionDebugMinusAXTest,
   // Test concurrent Run() calls on a graph with different debug watches.
 
   Initialize({3, 2, -1, 0});
-  auto session = CreateSession();
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
   TF_ASSERT_OK(session->Create(def_));
 
@@ -505,9 +499,7 @@ class SessionDebugOutputSlotWithoutOngoingEdgeTest : public ::testing::Test {
     Graph graph(OpRegistry::Global());
 
 #if GOOGLE_CUDA
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:GPU:0";
-#elif defined(TENSORFLOW_USE_SYCL)
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:SYCL:0";
+    const string kDeviceName = "/job:localhost/replica:0/task:0/gpu:0";
 #else
     const string kDeviceName = "/job:localhost/replica:0/task:0/cpu:0";
 #endif
@@ -539,7 +531,7 @@ class SessionDebugOutputSlotWithoutOngoingEdgeTest : public ::testing::Test {
 TEST_F(SessionDebugOutputSlotWithoutOngoingEdgeTest,
        WatchSlotWithoutOutgoingEdge) {
   Initialize();
-  auto session = CreateSession();
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
   DebugGateway debug_gateway(session.get());
@@ -607,9 +599,7 @@ class SessionDebugVariableTest : public ::testing::Test {
     Graph graph(OpRegistry::Global());
 
 #if GOOGLE_CUDA
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:GPU:0";
-#elif defined(TENSORFLOW_USE_SYCL)
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:SYCL:0";
+    const string kDeviceName = "/job:localhost/replica:0/task:0/gpu:0";
 #else
     const string kDeviceName = "/job:localhost/replica:0/task:0/cpu:0";
 #endif
@@ -664,7 +654,7 @@ class SessionDebugVariableTest : public ::testing::Test {
 
 TEST_F(SessionDebugVariableTest, WatchUninitializedVariableWithDebugOps) {
   Initialize();
-  auto session = CreateSession();
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
   DebugGateway debug_gateway(session.get());
@@ -743,7 +733,7 @@ TEST_F(SessionDebugVariableTest, WatchUninitializedVariableWithDebugOps) {
 TEST_F(SessionDebugVariableTest, VariableAssignWithDebugOps) {
   // Tensor contains one count of NaN
   Initialize();
-  auto session = CreateSession();
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
   DebugGateway debug_gateway(session.get());
@@ -833,8 +823,6 @@ TEST_F(SessionDebugVariableTest, VariableAssignWithDebugOps) {
 
 #if GOOGLE_CUDA
   ASSERT_EQ(2, run_metadata.partition_graphs().size());
-#elif defined(TENSORFLOW_USE_SYCL)
-  ASSERT_EQ(2, run_metadata.partition_graphs().size());
 #else
   ASSERT_EQ(1, run_metadata.partition_graphs().size());
 #endif
@@ -872,17 +860,13 @@ TEST_F(SessionDebugVariableTest, VariableAssignWithDebugOps) {
   ASSERT_EQ(2, debug_nan_count_tensor_vals[0].scalar<int64>()());
 }
 
-#if defined(GOOGLE_CUDA) || defined(TENSORFLOW_USE_SYCL)
+#if GOOGLE_CUDA
 class SessionDebugGPUSwitchTest : public ::testing::Test {
  public:
   void Initialize() {
     Graph graph(OpRegistry::Global());
 
-#ifdef GOOGLE_CUDA
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:GPU:0";
-#elif TENSORFLOW_USE_SYCL
-    const string kDeviceName = "/job:localhost/replica:0/task:0/device:SYCL:0";
-#endif
+    const string kDeviceName = "/job:localhost/replica:0/task:0/gpu:0";
 
     Tensor vb(DT_BOOL, TensorShape({}));
     vb.scalar<bool>()() = true;
@@ -919,7 +903,7 @@ class SessionDebugGPUSwitchTest : public ::testing::Test {
 // Test for debug-watching tensors marked as HOST_MEMORY on GPU.
 TEST_F(SessionDebugGPUSwitchTest, RunSwitchWithHostMemoryDebugOp) {
   Initialize();
-  auto session = CreateSession();
+  std::unique_ptr<DirectSession> session(CreateSession());
   ASSERT_TRUE(session != nullptr);
 
   DebugGateway debug_gateway(session.get());

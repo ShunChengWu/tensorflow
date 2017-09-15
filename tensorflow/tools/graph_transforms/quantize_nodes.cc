@@ -56,13 +56,6 @@ struct QuantizedOpInfo {
 // conversion process can transform them.
 const std::vector<QuantizedOpInfo>& GetQuantizedOpList() {
   static const std::vector<QuantizedOpInfo> op_list = {
-      {"Add",
-       {},
-       {{"T1", DT_QUINT8}, {"T2", DT_QUINT8}, {"Toutput", DT_QINT32}},
-       DT_QUINT8,
-       DT_QINT32,
-       {},
-       QuantizedOpInfo::CONTIGUOUS_MIN_MAX},
       {"AvgPool",
        {"ksize", "strides", "padding"},
        {{"T", DT_QUINT8}},
@@ -119,13 +112,6 @@ const std::vector<QuantizedOpInfo>& GetQuantizedOpList() {
        DT_QUINT8,
        {},
        QuantizedOpInfo::CONTIGUOUS_MIN_MAX},
-      {"ResizeBilinear",
-       {"align_corners"},
-       {{"T", DT_QUINT8}},
-       DT_QUINT8,
-       DT_QUINT8,
-       {1},
-       QuantizedOpInfo::CONTIGUOUS_MIN_MAX},
       {"Relu6",
        {},
        {{"Tinput", DT_QUINT8}},
@@ -156,7 +142,7 @@ string UniqueNodeNameFromInput(const string& input_name) {
     result += "__hat__";
   }
   result += node_name;
-  if (!suffix.empty()) {
+  if (suffix != "") {
     result += "__port__" + suffix.substr(1, suffix.size() - 1);
   }
   return result;
@@ -344,14 +330,15 @@ Status QuantizePlaceholders(const GraphDef& input_graph_def,
   placeholder_graph_def.Clear();
   for (const NodeDef& node : input_graph_def.node()) {
     if (node.op() != "Placeholder") {
-      *(placeholder_graph_def.mutable_node()->Add()) = node;
+      (placeholder_graph_def.mutable_node()->Add())->CopyFrom(node);
     } else {
       string namespace_prefix = node.name() + "_eightbit";
 
       NodeDef quantized_placeholder;
-      quantized_placeholder = node;
+      quantized_placeholder.CopyFrom(node);
       SetNodeAttr("dtype", DT_QUINT8, &quantized_placeholder);
-      *(placeholder_graph_def.mutable_node()->Add()) = quantized_placeholder;
+      (placeholder_graph_def.mutable_node()->Add())
+          ->CopyFrom(quantized_placeholder);
 
       NodeDef min_node;
       min_node.set_op("Const");
@@ -360,7 +347,7 @@ Status QuantizePlaceholders(const GraphDef& input_graph_def,
       Tensor min_tensor(DT_FLOAT, {});
       min_tensor.flat<float>()(0) = input_min;
       SetNodeTensorAttr<float>("value", min_tensor, &min_node);
-      *(placeholder_graph_def.mutable_node()->Add()) = min_node;
+      (placeholder_graph_def.mutable_node()->Add())->CopyFrom(min_node);
 
       NodeDef max_node;
       max_node.set_op("Const");
@@ -369,7 +356,7 @@ Status QuantizePlaceholders(const GraphDef& input_graph_def,
       Tensor max_tensor(DT_FLOAT, {});
       max_tensor.flat<float>()(0) = input_max;
       SetNodeTensorAttr<float>("value", max_tensor, &max_node);
-      *(placeholder_graph_def.mutable_node()->Add()) = max_node;
+      (placeholder_graph_def.mutable_node()->Add())->CopyFrom(max_node);
 
       const string rename_suffix = "__RENAMED_PLACEHOLDER__";
       NodeDef dequantize_node;
@@ -380,7 +367,7 @@ Status QuantizePlaceholders(const GraphDef& input_graph_def,
       AddNodeInput(node.name() + rename_suffix, &dequantize_node);
       AddNodeInput(min_node.name(), &dequantize_node);
       AddNodeInput(max_node.name(), &dequantize_node);
-      *(placeholder_graph_def.mutable_node()->Add()) = dequantize_node;
+      (placeholder_graph_def.mutable_node()->Add())->CopyFrom(dequantize_node);
 
       // First make sure that any internal references to the old placeholder
       // now point to the dequantize result.
@@ -525,7 +512,7 @@ Status MergeAdjacentRequantizes(const GraphDef& input_graph_def,
         new_nodes->push_back(fake_requantize_max_node);
 
         NodeDef requantize_node;
-        requantize_node = fake_requantize_node;
+        requantize_node.CopyFrom(fake_requantize_node);
         requantize_node.mutable_input()->Clear();
         AddNodeInput(original_op_node.name() + ":0", &requantize_node);
         AddNodeInput(original_op_node.name() + ":1", &requantize_node);
@@ -574,7 +561,7 @@ Status HoistFakeQuants(const GraphDef& input_graph_def,
             current_match = current_match.inputs[0];
           }
           NodeDef new_fake_quant_node;
-          new_fake_quant_node = fake_quant_node;
+          new_fake_quant_node.CopyFrom(fake_quant_node);
           new_fake_quant_node.set_name(fake_quant_node.name() + "_hoisted");
           new_fake_quant_node.set_input(
               0, linear_nodes[linear_nodes.size() - 2].input(0));

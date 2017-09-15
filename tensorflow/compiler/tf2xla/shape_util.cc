@@ -24,18 +24,12 @@ limitations under the License.
 namespace tensorflow {
 
 // Convert an XLA Shape into the equivalent TensorFlow shape.
-Status XLAShapeToTensorShape(const xla::Shape& shape,
-                             TensorShape* tensor_shape) {
-  if (xla::ShapeUtil::IsTuple(shape)) {
-    return errors::InvalidArgument("XLA shape ",
-                                   xla::ShapeUtil::HumanString(shape),
-                                   " cannot be converted to a TensorShape");
-  }
-  *tensor_shape = TensorShape();
+TensorShape XLAShapeToTensorShape(const xla::Shape& shape) {
+  TensorShape tensor_shape;
   for (int i = 0; i < xla::ShapeUtil::Rank(shape); ++i) {
-    tensor_shape->AddDim(shape.dimensions(i));
+    tensor_shape.AddDim(shape.dimensions(i));
   }
-  return Status::OK();
+  return tensor_shape;
 }
 
 // Convert a TensorShape into the equivalent XLA Shape proto.

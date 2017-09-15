@@ -323,7 +323,7 @@ Status BatchExampleProtoToTensors(
     std::vector<Tensor>* output_sparse_shapes_tensor) {
   const int batch_size = examples.size();
 
-  const bool has_names = (!names.empty());
+  const bool has_names = (names.size() > 0);
   if (has_names) {
     if (names.size() != examples.size()) {
       return errors::InvalidArgument(

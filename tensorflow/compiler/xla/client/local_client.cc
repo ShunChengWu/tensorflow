@@ -17,7 +17,7 @@ limitations under the License.
 
 #include <utility>
 
-#include "llvm/ADT/Triple.h"
+#include "external/llvm/include/llvm/ADT/Triple.h"
 #include "tensorflow/compiler/xla/ptr_util.h"
 #include "tensorflow/compiler/xla/service/backend.h"
 #include "tensorflow/compiler/xla/service/llvm_ir/llvm_util.h"
@@ -198,8 +198,16 @@ StatusOr<std::unique_ptr<ShapedBuffer>> LocalExecutable::Run(
   if (executable_->dumping()) {
     return ExecuteAndDump(&service_options, arguments);
   }
-  return executable_->ExecuteOnStreamWrapper<std::unique_ptr<ShapedBuffer>>(
-      &service_options, options.execution_profile(), arguments);
+  return Service::ExecuteOnStreamWrapper<
+      StatusOr<std::unique_ptr<ShapedBuffer>>>(
+      executable_.get(), &service_options, options.execution_profile(),
+      backend_,
+      [&arguments](Executable* executable,
+                   const ServiceExecutableRunOptions* run_options,
+                   HloExecutionProfile* hlo_execution_profile) {
+        return executable->ExecuteOnStream(run_options, arguments,
+                                           hlo_execution_profile);
+      });
 }
 
 StatusOr<std::unique_ptr<ShapedBuffer>> LocalExecutable::ExecuteAndDump(
@@ -222,9 +230,8 @@ tensorflow::Status LocalExecutable::RecordArguments(
     SessionModule* session_module) {
   session_module->clear_arguments();
   for (const ShapedBuffer* argument : arguments) {
-    Literal literal;
-    TF_RETURN_IF_ERROR(LiteralFromShapedBuffer(*argument, &literal));
-    *session_module->add_arguments() = literal.ToProto();
+    TF_RETURN_IF_ERROR(
+        LiteralFromShapedBuffer(*argument, session_module->add_arguments()));
   }
   return tensorflow::Status::OK();
 }
@@ -232,13 +239,9 @@ tensorflow::Status LocalExecutable::RecordArguments(
 tensorflow::Status LocalExecutable::RecordResult(
     const ShapedBuffer* result, SessionModule* session_module) {
   session_module->clear_result();
-  Literal literal(session_module->result());
-  TF_RETURN_IF_ERROR(LiteralFromShapedBuffer(*result, &literal));
-  *session_module->mutable_result() = literal.ToProto();
-  return tensorflow::Status::OK();
+  return LiteralFromShapedBuffer(*result, session_module->mutable_result());
 }
 
-// TODO(dnovillo) Change signature to return StatusOr<Literal>.
 tensorflow::Status LocalExecutable::LiteralFromShapedBuffer(
     const ShapedBuffer& shaped_buffer, Literal* literal) {
   TF_ASSIGN_OR_RETURN(

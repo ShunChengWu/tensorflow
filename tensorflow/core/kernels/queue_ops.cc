@@ -425,27 +425,6 @@ class QueueSizeOp : public QueueOpKernel {
 REGISTER_KERNEL_BUILDER(Name("QueueSize").Device(DEVICE_CPU), QueueSizeOp);
 REGISTER_KERNEL_BUILDER(Name("QueueSizeV2").Device(DEVICE_CPU), QueueSizeOp);
 
-class QueueIsClosedOp : public QueueOpKernel {
- public:
-  explicit QueueIsClosedOp(OpKernelConstruction* context)
-     : QueueOpKernel(context) {}
- 
- protected:
-  void ComputeAsync(OpKernelContext* ctx, QueueInterface* queue,
-                    DoneCallback callback) override {
-    Tensor* Tqueue_is_closed = nullptr;
-    OP_REQUIRES_OK(ctx, ctx->allocate_output(0, TensorShape({}), &Tqueue_is_closed));
-    Tqueue_is_closed->flat<bool>().setConstant(queue->is_closed());
-    callback();
-  }
-
- private:
-  TF_DISALLOW_COPY_AND_ASSIGN(QueueIsClosedOp);
-};
-
-REGISTER_KERNEL_BUILDER(Name("QueueIsClosed").Device(DEVICE_CPU), QueueIsClosedOp);
-REGISTER_KERNEL_BUILDER(Name("QueueIsClosedV2").Device(DEVICE_CPU), QueueIsClosedOp);
-
 class FakeQueueOp : public OpKernel {
  public:
   explicit FakeQueueOp(OpKernelConstruction* context) : OpKernel(context) {
@@ -454,7 +433,7 @@ class FakeQueueOp : public OpKernel {
                                                 &handle_, nullptr));
   }
 
-  void Compute(OpKernelContext* context) override {
+  void Compute(OpKernelContext* context) {
     ResourceHandle ref = context->input(0).flat<ResourceHandle>()(0);
     handle_.AccessTensor(context)->flat<string>()(0) = ref.container();
     handle_.AccessTensor(context)->flat<string>()(1) = ref.name();

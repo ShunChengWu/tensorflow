@@ -58,8 +58,8 @@ class Geometric(distribution.Distribution):
   def __init__(self,
                logits=None,
                probs=None,
-               validate_args=False,
-               allow_nan_stats=True,
+               validate_args=True,
+               allow_nan_stats=False,
                name="Geometric"):
     """Construct Geometric distributions.
 
@@ -143,32 +143,32 @@ class Geometric(distribution.Distribution):
     return math_ops.floor(
         math_ops.log(sampled) / math_ops.log1p(-self.probs))
 
-  def _cdf(self, x):
+  def _cdf(self, counts):
     if self.validate_args:
-      x = distribution_util.embed_check_nonnegative_integer_form(x)
-    else:
-      # Whether or not x is integer-form, the following is well-defined.
-      # However, scipy takes the floor, so we do too.
-      x = math_ops.floor(x)
-    x *= array_ops.ones_like(self.probs)
+      # We set `check_integer=False` since the CDF is defined on whole real
+      # line.
+      counts = math_ops.floor(
+          distribution_util.embed_check_nonnegative_discrete(
+              counts, check_integer=False))
+    counts *= array_ops.ones_like(self.probs)
     return array_ops.where(
-        x < 0.,
-        array_ops.zeros_like(x),
-        -math_ops.expm1((1. + x) * math_ops.log1p(-self.probs)))
+        counts < 0.,
+        array_ops.zeros_like(counts),
+        -math_ops.expm1(
+            (counts + 1) * math_ops.log1p(-self.probs)))
 
-  def _log_prob(self, x):
+  def _log_prob(self, counts):
     if self.validate_args:
-      x = distribution_util.embed_check_nonnegative_integer_form(x)
-    else:
-      # For consistency with cdf, we take the floor.
-      x = math_ops.floor(x)
-    x *= array_ops.ones_like(self.probs)
-    probs = self.probs * array_ops.ones_like(x)
+      counts = distribution_util.embed_check_nonnegative_discrete(
+          counts, check_integer=True)
+    counts *= array_ops.ones_like(self.probs)
+    probs = self.probs * array_ops.ones_like(counts)
+
     safe_domain = array_ops.where(
-        math_ops.equal(x, 0.),
+        math_ops.equal(counts, 0.),
         array_ops.zeros_like(probs),
         probs)
-    return x * math_ops.log1p(-safe_domain) + math_ops.log(probs)
+    return counts * math_ops.log1p(-safe_domain) + math_ops.log(probs)
 
   def _entropy(self):
     probs = self._probs

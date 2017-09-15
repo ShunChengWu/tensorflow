@@ -53,9 +53,7 @@ from tensorflow.python.platform import app
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import saver as saver_lib
 
-# Mapping between old <=> new names. Externalized so that user scripts that
-# may need to consume multiple checkpoint formats can use this metadata.
-RNN_NAME_REPLACEMENTS = collections.OrderedDict([
+_RNN_NAME_REPLACEMENTS = collections.OrderedDict([
     ############################################################################
     # contrib/rnn/python/ops/core_rnn_cell_impl.py
     # BasicRNNCell
@@ -126,20 +124,6 @@ RNN_NAME_REPLACEMENTS = collections.OrderedDict([
      'attention_cell_wrapper/attention/kernel'),
     ('attention_cell_wrapper/attention/biases',
      'attention_cell_wrapper/attention/bias'),
-    ############################################################################
-    # contrib/legacy_seq2seq/python/ops/seq2seq.py
-    ('attention_decoder/weights',
-     'attention_decoder/kernel'),
-    ('attention_decoder/biases',
-     'attention_decoder/bias'),
-    ('attention_decoder/Attention_0/weights',
-     'attention_decoder/Attention_0/kernel'),
-    ('attention_decoder/Attention_0/biases',
-     'attention_decoder/Attention_0/bias'),
-    ('attention_decoder/AttnOutputProjection/weights',
-     'attention_decoder/AttnOutputProjection/kernel'),
-    ('attention_decoder/AttnOutputProjection/biases',
-     'attention_decoder/AttnOutputProjection/bias'),
 ])
 
 _RNN_SHARDED_NAME_REPLACEMENTS = collections.OrderedDict([
@@ -151,10 +135,10 @@ _RNN_SHARDED_NAME_REPLACEMENTS = collections.OrderedDict([
 
 
 def _rnn_name_replacement(var_name):
-  for pattern in RNN_NAME_REPLACEMENTS:
+  for pattern in _RNN_NAME_REPLACEMENTS:
     if pattern in var_name:
       old_var_name = var_name
-      var_name = var_name.replace(pattern, RNN_NAME_REPLACEMENTS[pattern])
+      var_name = var_name.replace(pattern, _RNN_NAME_REPLACEMENTS[pattern])
       logging.info('Converted: %s --> %s' % (old_var_name, var_name))
       break
   return var_name
@@ -178,7 +162,7 @@ def _split_sharded_vars(name_shape_map):
 
   Returns:
     not_sharded: Names of the non-sharded variables.
-    sharded: Names of the sharded variables.
+    sharded: Names of the sharded varibales.
   """
   sharded = []
   not_sharded = []

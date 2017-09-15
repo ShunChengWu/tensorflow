@@ -21,9 +21,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.eager import context
 from tensorflow.python.framework import function
-from tensorflow.python.framework import graph_to_function_def
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import variable_scope as vs
@@ -41,7 +39,7 @@ class _ExperimentalFuncGraph(function._FuncGraph):
   _ExperimentalFuncGraph overrides ops.Graph's create_op() so that we can keep
   track of every inputs into every op created inside the function.  If
   any input is from other graphs, we keep track of it in self.capture
-  and substitute the input with a place holder.
+  and substitue the input with a place holder.
 
   Each captured input's corresponding place holder is converted into a
   function argument and the caller passes in the captured tensor.
@@ -73,7 +71,8 @@ class _ExperimentalFuncGraph(function._FuncGraph):
           self.extra_inputs.append(x)
           ph = array_ops.placeholder(x.dtype, shape=x.get_shape())
           # pylint: disable=protected-access
-          ph._handle_data = x._handle_data
+          ph._handle_shape = x._handle_shape
+          ph._handle_dtype = x._handle_dtype
           # pylint: enable=protected-access
           inputs[i] = ph
           self._captured[x] = ph
@@ -86,13 +85,11 @@ class _ExperimentalFuncGraph(function._FuncGraph):
     return op.outputs[tensor.value_index]
 
   def _add_op_and_parents(self, op):
-    op_def = graph_to_function_def._get_op_def(op)
+    op_def = function._get_op_def(op)
     if op_def.is_stateful:
-      raise ValueError("Cannot capture a stateful node (name:%s, type:%s) "
-                       "by value." % (op.name, op.type))
+      raise ValueError("Cannot capture a stateful node by value.")
     elif op.type in ("Placeholder", "PlaceholderV2"):
-      raise ValueError("Cannot capture a placeholder (name:%s, type:%s) "
-                       "by value." % (op.name, op.type))
+      raise ValueError("Cannot capture a placeholder by value.")
 
     captured_inputs = [self._add_tensor_and_parents(x) for x in op.inputs]
 
@@ -153,11 +150,6 @@ class _ExperimentalDefinedFunction(function._DefinedFunction):
 
   def _create_definition_if_needed(self):
     """Creates the function definition if it's not created yet."""
-    with context.graph_mode():
-      self._create_definition_if_needed_impl()
-
-  def _create_definition_if_needed_impl(self):
-    """You're looking for _create_definition_if_needed(), not this."""
 
     if self._definition is not None:
       return
@@ -185,7 +177,7 @@ class _ExperimentalDefinedFunction(function._DefinedFunction):
     self._sub_functions = temp_graph._functions
 
     # Build the FunctionDef
-    self._definition = graph_to_function_def.graph_to_function_def(
+    self._definition = function._graph_to_function_def(
         temp_graph, temp_graph.get_operations(), inputs, outputs,
         out_names=self._out_names)
 

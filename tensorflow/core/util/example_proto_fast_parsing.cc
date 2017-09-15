@@ -66,7 +66,7 @@ namespace parsed {
 class Feature {
  public:
   Feature() {}
-  explicit Feature(StringPiece serialized) : serialized_(serialized) {}
+  Feature(StringPiece serialized) : serialized_(serialized) {}
 
   Status ParseDataType(DataType* dtype) {
     DCHECK(dtype != nullptr);
@@ -89,7 +89,7 @@ class Feature {
       default:
         // Initialize variable to avoid compiler warning
         *dtype = DT_INVALID;
-        return errors::InvalidArgument("Unsupported datatype.");
+        return errors::InvalidArgument("Unsuported datatype.");
     }
     return Status::OK();
   }
@@ -657,8 +657,7 @@ Status FastParseSerializedExample(
           example_dtype != config.sparse[d].dtype) {
         return example_error(strings::StrCat(
             "Data types don't match. ",
-            "Expected type: ", DataTypeString(config.sparse[d].dtype),
-            ", Actual type: ", DataTypeString(example_dtype)));
+            "Expected type: ", DataTypeString(config.sparse[d].dtype)));
       }
 
       switch (config.sparse[d].dtype) {
@@ -936,8 +935,8 @@ Status FastParseExample(const Config& config,
     for (size_t e = start; e < end; ++e) {
       status_of_minibatch[minibatch] = FastParseSerializedExample(
           serialized[e],
-          (!example_names.empty() ? example_names[e] : "<unknown>"), e, config,
-          config_index, hasher, &fixed_dense_values,
+          (example_names.size() > 0 ? example_names[e] : "<unknown>"), e,
+          config, config_index, hasher, &fixed_dense_values,
           &varlen_dense_buffers[minibatch], &sparse_buffers[minibatch]);
       if (!status_of_minibatch[minibatch].ok()) break;
     }

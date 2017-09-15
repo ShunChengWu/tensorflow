@@ -58,7 +58,6 @@ cuda_py_tests(
         "//tensorflow/python:variable_scope",
         "//tensorflow/python:variables",
     ],
-    tags = ["noasan"],  # times out b/63678675
 )
 
 filegroup(

@@ -34,6 +34,10 @@ class ServiceInterface {
   virtual tensorflow::Status TransferToClient(
       const TransferToClientRequest* arg, TransferToClientResponse* result) = 0;
 
+  virtual tensorflow::Status TransferToClientInProcess(
+      const TransferToClientInProcessRequest* arg,
+      TransferToClientInProcessResponse* result) = 0;
+
   virtual tensorflow::Status TransferToServer(
       const TransferToServerRequest* arg, TransferToServerResponse* result) = 0;
 
@@ -46,6 +50,10 @@ class ServiceInterface {
 
   virtual tensorflow::Status ResetDevice(const ResetDeviceRequest* arg,
                                          ResetDeviceResponse* result) = 0;
+
+  virtual tensorflow::Status TransferToServerInProcess(
+      const TransferToServerInProcessRequest* arg,
+      TransferToServerInProcessResponse* result) = 0;
 
   virtual tensorflow::Status LoadComputationSnapshot(
       const LoadComputationSnapshotRequest* request,

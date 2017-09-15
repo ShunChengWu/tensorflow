@@ -21,21 +21,48 @@ namespace tensorflow {
 
 namespace {
 
-// See documentation in ../ops/dataset_ops.cc for a high-level
+// See documentation in ../ops/iterator_ops.cc for a high-level
 // description of the following op.
 
-class ZipDatasetOp : public DatasetOpKernel {
+class ZipDatasetOp : public OpKernel {
  public:
-  explicit ZipDatasetOp(OpKernelConstruction* ctx) : DatasetOpKernel(ctx) {}
+  explicit ZipDatasetOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
 
-  void MakeDataset(OpKernelContext* ctx, DatasetBase** output) override {
+  void Compute(OpKernelContext* ctx) override {
     std::vector<DatasetBase*> inputs;
+    Status s;
     for (size_t i = 0; i < ctx->num_inputs(); ++i) {
+      // Create a new ZipDatasetOp::Dataset, insert it in the step-local
+      // container, and return it as the output.
       DatasetBase* input;
-      OP_REQUIRES_OK(ctx, GetDatasetFromVariantTensor(ctx->input(i), &input));
+      s.Update(LookupResource(ctx, HandleFromInput(ctx, i), &input));
+      if (!s.ok()) {
+        break;
+      }
       inputs.push_back(input);
     }
-    *output = new Dataset(inputs);
+
+    if (s.ok()) {
+      DatasetBase* dataset = new Dataset(inputs);
+      Tensor* output = nullptr;
+      s = ctx->allocate_output(0, TensorShape({}), &output);
+      if (s.ok()) {
+        ResourceHandle handle = MakeResourceHandle<DatasetBase>(
+            ctx, ctx->step_container()->name(), name());
+        s = CreateResource(ctx, handle, dataset);
+        if (s.ok()) {
+          output->flat<ResourceHandle>()(0) = handle;
+        }
+      }
+    }
+
+    // TODO(mrry): Implement a container that acts as a
+    // `std::vector<core::ScopedUnref>`, to avoid having to unref the
+    // inputs manually, and re-enable the use of `OP_REQUIRES_OK()`.
+    for (DatasetBase* input : inputs) {
+      input->Unref();
+    }
+    ctx->SetStatus(s);
   }
 
  private:
@@ -60,16 +87,13 @@ class ZipDatasetOp : public DatasetOpKernel {
       }
     }
 
-    std::unique_ptr<IteratorBase> MakeIterator(
-        const string& prefix) const override {
-      return std::unique_ptr<IteratorBase>(
-          new Iterator({this, strings::StrCat(prefix, "::Zip")}));
+    std::unique_ptr<IteratorBase> MakeIterator() const override {
+      return std::unique_ptr<IteratorBase>(new Iterator(this));
     }
 
     const DataTypeVector& output_dtypes() const override {
       return output_dtypes_;
     }
-
     const std::vector<PartialTensorShape>& output_shapes() const override {
       return output_shapes_;
     }
@@ -79,19 +103,16 @@ class ZipDatasetOp : public DatasetOpKernel {
    private:
     class Iterator : public DatasetIterator<Dataset> {
      public:
-      explicit Iterator(const Params& params)
-          : DatasetIterator<Dataset>(params) {
-        input_impls_.reserve(params.dataset->inputs_.size());
-        size_t idx = 0;
-        for (const auto& input : params.dataset->inputs_) {
-          input_impls_.emplace_back(input->MakeIterator(
-              strings::StrCat(params.prefix, "[", idx++, "]")));
+      explicit Iterator(const Dataset* dataset)
+          : DatasetIterator<Dataset>(dataset) {
+        input_impls_.reserve(dataset->inputs_.size());
+        for (const auto& input : dataset->inputs_) {
+          input_impls_.emplace_back(input->MakeIterator());
         }
       }
 
-      Status GetNextInternal(IteratorContext* ctx,
-                             std::vector<Tensor>* out_tensors,
-                             bool* end_of_sequence) override {
+      Status GetNext(IteratorContext* ctx, std::vector<Tensor>* out_tensors,
+                     bool* end_of_sequence) override {
         mutex_lock l(mu_);
         out_tensors->clear();
         out_tensors->reserve(dataset()->output_dtypes().size());

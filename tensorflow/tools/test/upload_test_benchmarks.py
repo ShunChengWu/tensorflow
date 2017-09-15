@@ -162,7 +162,7 @@ def upload_benchmark_data(client, data):
   t_val.update({
       "test": test_name,
       "start": start_time,
-      "info": unicode(data)
+      "info": unicode(test_result)
   })
   batch.append(t_val)
 

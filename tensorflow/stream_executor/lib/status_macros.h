@@ -40,7 +40,7 @@ limitations under the License.
   if (!__name.ok()) {                                  \
     return __name.status();                            \
   }                                                    \
-  __lhs = std::move(__name.ValueOrDie());
+  __lhs = __name.ConsumeValueOrDie();
 
 // Early-returns the status if it is in error; otherwise, assigns the
 // right-hand-side expression to the left-hand-side expression.

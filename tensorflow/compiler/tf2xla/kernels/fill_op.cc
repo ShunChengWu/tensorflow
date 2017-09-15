@@ -50,9 +50,8 @@ class FillOp : public XlaOpKernel {
     // Convert the dims literal into a vector that we can pass to
     // ComputationBuilder.
     std::vector<int64> broadcast;
-    broadcast.reserve(dims_literal.shape().dimensions(0));
     for (int i = 0; i < dims_literal.shape().dimensions(0); ++i) {
-      broadcast.push_back(dims_literal.Get<int>({i}));
+      broadcast.push_back(xla::LiteralUtil::Get<int>(dims_literal, {i}));
     }
     // Look up the value input, reshaping to a scalar if it was a
     // 'legacy' scalar (secretly a vector).

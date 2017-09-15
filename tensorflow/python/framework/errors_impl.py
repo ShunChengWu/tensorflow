@@ -23,8 +23,7 @@ import traceback
 import warnings
 
 from tensorflow.core.lib.core import error_codes_pb2
-from tensorflow.python import pywrap_tensorflow as c_api
-from tensorflow.python.framework import c_api_util
+from tensorflow.python import pywrap_tensorflow
 from tensorflow.python.util import compat
 
 
@@ -457,15 +456,13 @@ def _make_specific_exception(node_def, op, message, error_code):
 
 @contextlib.contextmanager
 def raise_exception_on_not_ok_status():
-  status = c_api_util.ScopedTFStatus()
-  yield status.status
+  status = pywrap_tensorflow.TF_NewStatus()
   try:
-    if c_api.TF_GetCode(status.status) != 0:
+    yield status
+    if pywrap_tensorflow.TF_GetCode(status) != 0:
       raise _make_specific_exception(
           None, None,
-          compat.as_text(c_api.TF_Message(status.status)),
-          c_api.TF_GetCode(status.status))
-  # Delete the underlying status object from memory otherwise it stays alive
-  # as there is a reference to status from this from the traceback due to raise.
+          compat.as_text(pywrap_tensorflow.TF_Message(status)),
+          pywrap_tensorflow.TF_GetCode(status))
   finally:
-    del status
+    pywrap_tensorflow.TF_DeleteStatus(status)

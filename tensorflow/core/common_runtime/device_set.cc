@@ -32,10 +32,7 @@ DeviceSet::~DeviceSet() {}
 
 void DeviceSet::AddDevice(Device* device) {
   devices_.push_back(device);
-  for (const string& name :
-       DeviceNameUtils::GetNamesForDeviceMappings(device->parsed_name())) {
-    device_by_name_.insert({name, device});
-  }
+  device_by_name_.insert({device->name(), device});
 }
 
 void DeviceSet::FindMatchingDevices(const DeviceNameUtils::ParsedName& spec,
@@ -56,7 +53,7 @@ Device* DeviceSet::FindDeviceByName(const string& name) const {
 
 // static
 int DeviceSet::DeviceTypeOrder(const DeviceType& d) {
-  return DeviceFactory::DevicePriority(d.type_string());
+  return DeviceFactory::DevicePriority(d.type());
 }
 
 static bool DeviceTypeComparator(const DeviceType& a, const DeviceType& b) {

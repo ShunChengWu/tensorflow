@@ -38,8 +38,7 @@ xla::ComputationBuilder* XlaOpKernelContext::builder() const {
 static const XlaExpression* CastExpressionFromTensor(const Tensor& tensor) {
   const XlaExpression* expression =
       reinterpret_cast<const XlaExpression*>(tensor.tensor_data().data());
-  CHECK(expression->handle().handle() != 0 ||
-        expression->resource() != nullptr);
+  CHECK(expression->handle().handle() != 0 || expression->variable_id() >= 0);
   VLOG(1) << "Fetched T" << expression->handle().handle();
   return expression;
 }
@@ -119,15 +118,22 @@ Status XlaOpKernelContext::ConstantInputReshaped(
   xla::Layout layout = xla::LayoutUtil::MakeLayout(layout_indices);
 
   // Ask the XLA compiler to evaluate the data handle to a literal.
-  xla::StatusOr<std::unique_ptr<xla::Literal>> computed =
+  xla::StatusOr<std::unique_ptr<xla::GlobalData>> computed =
       builder()->ComputeConstant(handle, &layout);
   if (!computed.ok()) {
     return errors::InvalidArgument(
         "Error evaluating ", context_->op_kernel().name(), " input ", index,
         ": ", computed.status().error_message());
   }
-  *constant_literal = std::move(*computed.ValueOrDie());
-
+  // Fetch the literal from the compiler service.
+  xla::StatusOr<std::unique_ptr<xla::Literal>> constant =
+      builder()->client()->Transfer(*computed.ValueOrDie());
+  if (!constant.ok()) {
+    return errors::InvalidArgument(
+        "Error evaluating ", context_->op_kernel().name(), " input ", index,
+        ": ", constant.status().error_message());
+  }
+  constant_literal->Swap(constant.ValueOrDie().get());
   return Status::OK();
 }
 
@@ -137,9 +143,9 @@ static Status LiteralToInt64Scalar(const xla::Literal& literal, int64* out) {
     return errors::InvalidArgument("value is not a scalar");
   }
   if (literal.shape().element_type() == xla::S32) {
-    *out = literal.Get<int32>({});
+    *out = xla::LiteralUtil::Get<int32>(literal, {});
   } else if (literal.shape().element_type() == xla::S64) {
-    *out = literal.Get<int64>({});
+    *out = xla::LiteralUtil::Get<int64>(literal, {});
   } else {
     return errors::InvalidArgument("value must be either int32 or int64");
   }
@@ -161,11 +167,11 @@ static Status LiteralToInt64Vector(const xla::Literal& literal,
   int64 size = xla::ShapeUtil::ElementsIn(literal.shape());
   if (literal.shape().element_type() == xla::S32) {
     for (int64 i = 0; i < size; ++i) {
-      out->push_back(literal.Get<int32>({i}));
+      out->push_back(xla::LiteralUtil::Get<int32>(literal, {i}));
     }
   } else if (literal.shape().element_type() == xla::S64) {
     for (int64 i = 0; i < size; ++i) {
-      out->push_back(literal.Get<int64>({i}));
+      out->push_back(xla::LiteralUtil::Get<int64>(literal, {i}));
     }
   } else {
     return errors::InvalidArgument("value must be either int32 or int64");
@@ -195,7 +201,7 @@ Status XlaOpKernelContext::ConstantInputAsInt64Literal(int index,
       return Status::OK();
 
     case xla::S64:
-      *out = std::move(literal);
+      out->Swap(&literal);
       return Status::OK();
 
     default:
@@ -245,9 +251,11 @@ Status XlaOpKernelContext::ReadVariableInput(
     int index, xla::ComputationDataHandle* value) {
   const Tensor& tensor = context_->input(index);
   const XlaExpression* expression = CastExpressionFromTensor(tensor);
-  XlaResource* variable = expression->resource();
-  TF_RET_CHECK(variable != nullptr);
-  TF_RET_CHECK(variable->kind == XlaResource::kVariable);
+  int variable_id = expression->variable_id();
+
+  XlaContext::Variable* variable;
+  XlaContext& context = XlaContext::Get(this);
+  TF_RETURN_IF_ERROR(context.GetVariable(variable_id, &variable));
   if (variable->value.handle() == 0) {
     return errors::InvalidArgument("Read of uninitialized variable ",
                                    variable->name);
@@ -256,13 +264,28 @@ Status XlaOpKernelContext::ReadVariableInput(
   return Status::OK();
 }
 
+string XlaOpKernelContext::VariableDebugString(int index) {
+  const Tensor& tensor = context_->input(index);
+  const XlaExpression* expression = CastExpressionFromTensor(tensor);
+  int variable_id = expression->variable_id();
+
+  XlaContext::Variable* variable;
+  XlaContext& context = XlaContext::Get(this);
+  if (!context.GetVariable(variable_id, &variable).ok()) {
+    return "<invalid variable ID>";
+  }
+  return variable->name;
+}
+
 Status XlaOpKernelContext::GetVariableTypeAndShape(int index, DataType* type,
                                                    TensorShape* shape) const {
   const Tensor& tensor = context_->input(index);
   const XlaExpression* expression = CastExpressionFromTensor(tensor);
-  XlaResource* variable = expression->resource();
-  TF_RET_CHECK(variable != nullptr);
-  TF_RET_CHECK(variable->kind == XlaResource::kVariable);
+  int variable_id = expression->variable_id();
+
+  XlaContext::Variable* variable;
+  XlaContext& context = XlaContext::Get(this);
+  TF_RETURN_IF_ERROR(context.GetVariable(variable_id, &variable));
   if (variable->value.handle() == 0) {
     return errors::InvalidArgument("Read of uninitialized variable ",
                                    variable->name);
@@ -272,8 +295,7 @@ Status XlaOpKernelContext::GetVariableTypeAndShape(int index, DataType* type,
   if (!shape_or_status.ok()) {
     return shape_or_status.status();
   }
-  TF_RETURN_IF_ERROR(
-      XLAShapeToTensorShape(*shape_or_status.ValueOrDie(), shape));
+  *shape = XLAShapeToTensorShape(*shape_or_status.ValueOrDie());
   return Status::OK();
 }
 
@@ -290,11 +312,10 @@ void XlaOpKernelContext::SetOutput(int index,
   // The step's default allocator is the dummy XlaCompilationAllocator which
   // simply allocates a metadata buffer to hold the expression to which it
   // corresponds.
-  TensorShape tensor_shape;
-  OP_REQUIRES_OK(context_,
-                 XLAShapeToTensorShape(*shape.ValueOrDie(), &tensor_shape));
-  OP_REQUIRES_OK(context_,
-                 context_->allocate_output(index, tensor_shape, &output));
+  OP_REQUIRES_OK(
+      context_,
+      context_->allocate_output(
+          index, XLAShapeToTensorShape(*shape.ValueOrDie()), &output));
 
   // The expression is stored in the tensor's data buffer. Fill in the
   // fields now.
@@ -324,34 +345,25 @@ void XlaOpKernelContext::SetConstantOutput(int index, const Tensor& constant) {
   expression->set_constant_value(constant);
 }
 
-void XlaOpKernelContext::SetResourceOutput(int index, XlaResource* resource) {
+void XlaOpKernelContext::SetVariableOutput(int index, int variable_id) {
   Tensor* output = nullptr;
-  // The shape of the output tensor is the shape of the resource itself
-  // (i.e., a scalar), not the shape of the resource's value.
+  // The shape of the output tensor is the shape of the variable resource
+  // (i.e., a scalar), not the shape of the variable's value.
   OP_REQUIRES_OK(context_,
                  context_->allocate_output(index, TensorShape(), &output));
   XlaExpression* expression = CastExpressionFromUninitializedTensor(output);
-  expression->set_resource(resource);
-}
-
-Status XlaOpKernelContext::GetResourceInput(int index, XlaResource** resource) {
-  const XlaExpression* expression =
-      CastExpressionFromTensor(context_->input(index));
-  TF_RET_CHECK(expression->resource() != nullptr);
-  *resource = expression->resource();
-  return Status::OK();
+  expression->set_variable_id(variable_id);
 }
 
 Status XlaOpKernelContext::AssignVariable(
-    int input_index, DataType type, const xla::ComputationDataHandle& handle) {
-  TF_RET_CHECK(handle.handle() != 0);
+    int index, DataType type, const xla::ComputationDataHandle& handle) {
   SetOpHasSideEffects();
 
   const XlaExpression* expression =
-      CastExpressionFromTensor(context_->input(input_index));
-  XlaResource* variable = expression->resource();
-  TF_RET_CHECK(variable != nullptr);
-  TF_RET_CHECK(variable->kind == XlaResource::kVariable);
+      CastExpressionFromTensor(context_->input(index));
+  XlaContext& context = XlaContext::Get(this);
+  XlaContext::Variable* variable;
+  TF_RETURN_IF_ERROR(context.GetVariable(expression->variable_id(), &variable));
   if (!((variable->type == DT_INVALID && type != DT_INVALID) ||
         (variable->type == type))) {
     return errors::InvalidArgument(
@@ -384,6 +396,11 @@ const xla::Computation* XlaOpKernelContext::GetOrCreateMax(
 const xla::Computation* XlaOpKernelContext::GetOrCreateAdd(
     const DataType type) {
   return XlaContext::Get(context_).GetOrCreateAdd(type);
+}
+
+const xla::Computation* XlaOpKernelContext::GetOrCreateSigmoid(
+    const DataType type) {
+  return XlaContext::Get(context_).GetOrCreateSigmoid(type);
 }
 
 XlaOpKernel::XlaOpKernel(OpKernelConstruction* context) : OpKernel(context) {}

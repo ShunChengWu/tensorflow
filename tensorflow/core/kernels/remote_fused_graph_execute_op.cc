@@ -29,10 +29,9 @@ class RemoteFusedGraphExecuteOp : public OpKernel {
   explicit RemoteFusedGraphExecuteOp(OpKernelConstruction* const ctx)
       : OpKernel(ctx), execute_info_() {
     string serialized_proto;
-    OP_REQUIRES_OK(
-        ctx, ctx->GetAttr(RemoteFusedGraphExecuteUtils::
-                              ATTR_SERIALIZED_REMOTE_FUSED_GRAPH_EXECUTE_INFO,
-                          &serialized_proto));
+    OP_REQUIRES_OK(ctx,
+                   ctx->GetAttr("serialized_remote_fused_graph_execute_info",
+                                &serialized_proto));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Tinputs", &input_types_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("Toutputs", &output_types_));
     execute_info_.ParseFromString(serialized_proto);
@@ -41,8 +40,7 @@ class RemoteFusedGraphExecuteOp : public OpKernel {
           RemoteFusedGraphExecuteUtils::GetExecutorBuildFunc(
               execute_info_.executor_name());
       if (build_func != nullptr) {
-        TF_CHECK_OK((*build_func)(&remote_fused_graph_executor_));
-        CHECK(remote_fused_graph_executor_->IsEnabled());
+        Status status = (*build_func)(&remote_fused_graph_executor_);
       } else {
         LOG(ERROR) << "Executor not found for "
                    << execute_info_.executor_name();
@@ -110,12 +108,6 @@ class RemoteFusedGraphExecuteOp : public OpKernel {
               TF_CHECK_OK(ctx->allocate_output(i, shape, &output));
               return output;
             });
-      } else {
-        // For compatibility purpose, returns an empty tensor with specified
-        // data type as output if no executor is used.
-        Tensor* output = nullptr;
-        TensorShape ts({});
-        TF_CHECK_OK(ctx->allocate_output(i, ts, &output));
       }
     }
   }

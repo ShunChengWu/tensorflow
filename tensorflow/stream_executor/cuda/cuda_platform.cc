@@ -127,8 +127,23 @@ port::StatusOr<StreamExecutor*> CudaPlatform::ExecutorForDeviceWithPluginConfig(
 
 port::StatusOr<StreamExecutor*> CudaPlatform::GetExecutor(
     const StreamExecutorConfig& config) {
-  return executor_cache_.GetOrCreate(
-      config, [&]() { return GetUncachedExecutor(config); });
+  mutex_lock lock(mu_);
+
+  port::StatusOr<StreamExecutor*> status = executor_cache_.Get(config);
+  if (status.ok()) {
+    return status.ValueOrDie();
+  }
+
+  port::StatusOr<std::unique_ptr<StreamExecutor>> executor =
+      GetUncachedExecutor(config);
+  if (!executor.ok()) {
+    return executor.status();
+  }
+
+  StreamExecutor* naked_executor = executor.ValueOrDie().get();
+  SE_RETURN_IF_ERROR(
+      executor_cache_.Insert(config, executor.ConsumeValueOrDie()));
+  return naked_executor;
 }
 
 port::StatusOr<std::unique_ptr<StreamExecutor>>

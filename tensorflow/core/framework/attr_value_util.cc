@@ -15,12 +15,9 @@ limitations under the License.
 
 #include "tensorflow/core/framework/attr_value_util.h"
 
-#include <string>
 #include <vector>
-
 #include "tensorflow/core/framework/attr_value.pb_text.h"
 #include "tensorflow/core/framework/tensor.pb_text.h"
-#include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/framework/types.pb_text.h"
 #include "tensorflow/core/lib/core/errors.h"
@@ -29,6 +26,7 @@ limitations under the License.
 #include "tensorflow/core/platform/protobuf.h"
 
 namespace tensorflow {
+
 namespace {
 
 string SummarizeString(const string& str) {
@@ -38,8 +36,8 @@ string SummarizeString(const string& str) {
 string SummarizeTensor(const TensorProto& tensor_proto) {
   Tensor t;
   if (!t.FromProto(tensor_proto)) {
-    return strings::StrCat(
-        "<Invalid TensorProto: ", ProtoShortDebugString(tensor_proto), ">");
+    return strings::StrCat("<Invalid TensorProto: ",
+                           ProtoShortDebugString(tensor_proto), ">");
   }
   return t.DebugString();
 }
@@ -289,17 +287,15 @@ bool ParseAttrValue(StringPiece type, StringPiece text, AttrValue* out) {
   return ProtoParseFromString(to_parse, out);
 }
 
-void SetAttrValue(const AttrValue& value, AttrValue* out) { *out = value; }
-
 #define DEFINE_SET_ATTR_VALUE_ONE(ARG_TYPE, FIELD) \
   void SetAttrValue(ARG_TYPE value, AttrValue* out) { out->set_##FIELD(value); }
 
-#define DEFINE_SET_ATTR_VALUE_LIST(ARG_TYPE, FIELD)                       \
-  void SetAttrValue(ARG_TYPE value, AttrValue* out) {                     \
-    out->mutable_list()->Clear(); /* create list() even if value empty */ \
-    for (const auto& v : value) {                                         \
-      out->mutable_list()->add_##FIELD(v);                                \
-    }                                                                     \
+#define DEFINE_SET_ATTR_VALUE_LIST(ARG_TYPE, FIELD)              \
+  void SetAttrValue(ARG_TYPE value, AttrValue* out) {            \
+    out->mutable_list(); /* create list() even if value empty */ \
+    for (const auto& v : value) {                                \
+      out->mutable_list()->add_##FIELD(v);                       \
+    }                                                            \
   }
 
 #define DEFINE_SET_ATTR_VALUE_BOTH(ARG_TYPE, FIELD) \
@@ -323,7 +319,7 @@ void SetAttrValue(StringPiece value, AttrValue* out) {
 }
 
 void SetAttrValue(const gtl::ArraySlice<StringPiece> value, AttrValue* out) {
-  out->mutable_list()->Clear();  // Create list() even if value empty.
+  out->mutable_list();  // Create list() even if value empty.
   for (const auto& v : value) {
     out->mutable_list()->add_s(v.data(), v.size());
   }
@@ -342,14 +338,14 @@ void SetAttrValue(const PartialTensorShape& value, AttrValue* out) {
 }
 
 void SetAttrValue(const gtl::ArraySlice<TensorShape> value, AttrValue* out) {
-  out->mutable_list()->Clear();  // Create list() even if value empty.
+  out->mutable_list();  // Create list() even if value empty.
   for (const auto& v : value) {
     v.AsProto(out->mutable_list()->add_shape());
   }
 }
 
 void SetAttrValue(gtl::ArraySlice<TensorShapeProto> value, AttrValue* out) {
-  out->mutable_list()->Clear();  // Create list() even if value empty.
+  out->mutable_list();  // Create list() even if value empty.
   for (const auto& v : value) {
     *out->mutable_list()->add_shape() = v;
   }
@@ -357,7 +353,7 @@ void SetAttrValue(gtl::ArraySlice<TensorShapeProto> value, AttrValue* out) {
 
 void SetAttrValue(const gtl::ArraySlice<PartialTensorShape> value,
                   AttrValue* out) {
-  out->mutable_list()->Clear();  // Create list() even if value empty.
+  out->mutable_list();  // Create list() even if value empty.
   for (const auto& v : value) {
     v.AsProto(out->mutable_list()->add_shape());
   }
@@ -372,7 +368,7 @@ void SetAttrValue(const Tensor& value, AttrValue* out) {
 }
 
 void SetAttrValue(const gtl::ArraySlice<Tensor> value, AttrValue* out) {
-  out->mutable_list()->Clear();  // Create list() even if value empty.
+  out->mutable_list();  // Create list() even if value empty.
   for (const auto& v : value) {
     if (v.NumElements() > 1) {
       v.AsProtoTensorContent(out->mutable_list()->add_tensor());
@@ -387,7 +383,7 @@ void SetAttrValue(const TensorProto& value, AttrValue* out) {
 }
 
 void SetAttrValue(const gtl::ArraySlice<TensorProto> value, AttrValue* out) {
-  out->mutable_list()->Clear();  // Create list() even if value empty.
+  out->mutable_list();  // Create list() even if value empty.
   for (const auto& v : value) {
     *out->mutable_list()->add_tensor() = v;
   }
@@ -398,7 +394,7 @@ void SetAttrValue(const NameAttrList& value, AttrValue* out) {
 }
 
 void SetAttrValue(gtl::ArraySlice<NameAttrList> value, AttrValue* out) {
-  out->mutable_list()->Clear();  // Create list() even if value empty.
+  out->mutable_list();  // Create list() even if value empty.
   for (const auto& v : value) {
     *out->mutable_list()->add_func() = v;
   }
@@ -461,8 +457,7 @@ bool HasPlaceHolder(const AttrValue& val) {
   return false;
 }
 
-bool SubstitutePlaceholders(const SubstituteFunc& substitute,
-                            AttrValue* value) {
+bool SubstitutePlaceholders(SubstituteFunc substitute, AttrValue* value) {
   switch (value->value_case()) {
     case AttrValue::kList: {
       for (NameAttrList& func : *value->mutable_list()->mutable_func()) {

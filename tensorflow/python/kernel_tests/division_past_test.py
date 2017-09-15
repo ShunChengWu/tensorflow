@@ -38,19 +38,15 @@ class DivisionTestCase(test.TestCase):
     # TODO(irving): Test int8, int16 once we support casts for those.
     dtypes = np.int32, np.int64, np.float32, np.float64
 
-    tensors = []
-    checks = []
-
     def check(x, y):
-      x = ops.convert_to_tensor(x)
-      y = ops.convert_to_tensor(y)
-      tensors.append((x, y))
-      def f(x, y):
-        self.assertEqual(x.dtype, y.dtype)
-        self.assertEqual(x, y)
-      checks.append(f)
+      if isinstance(x, ops.Tensor):
+        x = x.eval()
+      if isinstance(y, ops.Tensor):
+        y = y.eval()
+      self.assertEqual(x.dtype, y.dtype)
+      self.assertEqual(x, y)
 
-    with self.test_session() as sess:
+    with self.test_session():
       for dtype in dtypes:
         for x in map(dtype, values):
           for y in map(dtype, values):
@@ -64,9 +60,6 @@ class DivisionTestCase(test.TestCase):
                 floordiv = x // y
                 tf_floordiv = tf_x // tf_y
                 check(floordiv, tf_floordiv)
-      # Do only one sess.run for speed
-      for f, (x, y) in zip(checks, sess.run(tensors)):
-        f(x, y)
 
 
 if __name__ == "__main__":

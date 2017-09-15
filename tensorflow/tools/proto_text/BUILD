@@ -44,7 +44,6 @@ cc_library(
     hdrs = ["gen_proto_text_functions_lib.h"],
     linkopts = select({
         "//tensorflow:windows": [],
-        "//tensorflow:windows_msvc": [],
         "//tensorflow:darwin": [
             "-lm",
             "-lpthread",

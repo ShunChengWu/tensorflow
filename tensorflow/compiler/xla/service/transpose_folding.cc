@@ -172,14 +172,7 @@ StatusOr<bool> TransposeFolding::Run(HloModule* module) {
     return tensorflow::Status::OK();
   };
 
-  std::vector<HloComputation*> computations;
-  for (auto& computation : module->computations()) {
-    if (computation->IsFusionComputation()) {
-      continue;
-    }
-    computations.push_back(computation.get());
-  }
-  for (auto& comp : computations) {
+  for (auto& comp : module->computations()) {
     TF_RETURN_IF_ERROR(comp->Accept(visit_fn));
   }
 

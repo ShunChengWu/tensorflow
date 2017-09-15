@@ -31,7 +31,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/user_computation.h"
 #include "tensorflow/compiler/xla/service/versioned_computation_handle.h"
 #include "tensorflow/compiler/xla/shape_util.h"
-#include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/platform/logging.h"
 
 #include "tensorflow/compiler/xla/statusor.h"
@@ -55,7 +54,7 @@ class HloCostAnalysisTest : public ::testing::Test {
   HloCostAnalysisTest()
       : client_(ClientLibrary::LocalClientOrDie()),
         // Accessing service instance is required for the unit tests to enable
-        // whitebox accesses to the user computation built from the client,
+        // whitebox acccesses to the user computation built from the client,
         // as shown in the BuildHloGraph functions below.
         service_(static_cast<Service*>(ClientLibrary::GetXlaService(
             static_cast<LocalClient*>(client_)->platform()))),
@@ -128,8 +127,7 @@ class HloCostAnalysisTest : public ::testing::Test {
     VersionedComputationHandle versioned_handle =
         user_computation->GetVersionedHandle();
     return std::move(
-        computation_tracker_.BuildHloModule(versioned_handle, HloModuleConfig())
-            .ValueOrDie());
+        computation_tracker_.BuildHloModule(versioned_handle).ValueOrDie());
   }
 
   Client* client_;
@@ -330,67 +328,51 @@ TEST_F(HloCostAnalysisTest, MatmulAndConvolutionCanBeTheSameComputation) {
   EXPECT_EQ(conv_analysis.flop_count(), matmul_analysis.flop_count());
 }
 
-using FusionCostAnalysis = HloTestBase;
+using FusionCostAnalysis = ::testing::Test;
 
 TEST_F(FusionCostAnalysis, LoopFusion) {
-  // Do this 4 times with different per-second rates to test the computation of
-  // bottleneck time on fusion nodes.
-  for (int i = 0; i < 4; ++i) {
-    Shape r2f32 = ShapeUtil::MakeShape(F32, {2, 2});
+  Shape r2f32 = ShapeUtil::MakeShape(F32, {2, 2});
 
-    // Fuse all instructions in complicated expression:
-    //
-    //   add = Add(C1, C2)
-    //   clamp = Clamp(C2, add, add)
-    //   exp = Exp(add)
-    //   mul = Mul(exp, C3)
-    //   sub = Sub(mul, clamp)
-    //   tuple = Tuple({sub, sub, mul, C1})
-    HloComputation::Builder builder(TestName());
-    auto c1 = builder.AddInstruction(
-        HloInstruction::CreateConstant(Literal::CreateR2F32Linspace(
-            /*from=*/0.0f, /*to=*/1.0f, /*rows=*/2, /*cols=*/2)));
-    auto c2 = builder.AddInstruction(
-        HloInstruction::CreateConstant(Literal::CreateR2F32Linspace(
-            /*from=*/1.0f, /*to=*/2.0f, /*rows=*/2, /*cols=*/2)));
-    auto c3 = builder.AddInstruction(
-        HloInstruction::CreateConstant(Literal::CreateR2F32Linspace(
-            /*from=*/2.0f, /*to=*/3.0f, /*rows=*/2, /*cols=*/2)));
-    auto add = builder.AddInstruction(
-        HloInstruction::CreateBinary(r2f32, HloOpcode::kAdd, c1, c2));
-    auto clamp = builder.AddInstruction(
-        HloInstruction::CreateTernary(r2f32, HloOpcode::kClamp, c2, add, add));
-    auto exp = builder.AddInstruction(
-        HloInstruction::CreateUnary(r2f32, HloOpcode::kExp, add));
-    auto mul = builder.AddInstruction(
-        HloInstruction::CreateBinary(r2f32, HloOpcode::kMultiply, exp, c3));
-    auto sub = builder.AddInstruction(
-        HloInstruction::CreateBinary(r2f32, HloOpcode::kSubtract, mul, clamp));
-    auto tuple = HloInstruction::CreateTuple({sub, sub, mul, c1});
+  // Fuse all instructions in complicated expression:
+  //
+  //   add = Add(C1, C2)
+  //   clamp = Clamp(C2, add, add)
+  //   exp = Exp(add)
+  //   mul = Mul(exp, C3)
+  //   sub = Sub(mul, clamp)
+  //   tuple = Tuple({sub, sub, mul, C1})
+  auto c1 = HloInstruction::CreateConstant(LiteralUtil::CreateR2F32Linspace(
+      /*from=*/0.0f, /*to=*/1.0f, /*rows=*/2, /*cols=*/2));
+  auto c2 = HloInstruction::CreateConstant(LiteralUtil::CreateR2F32Linspace(
+      /*from=*/1.0f, /*to=*/2.0f, /*rows=*/2, /*cols=*/2));
+  auto c3 = HloInstruction::CreateConstant(LiteralUtil::CreateR2F32Linspace(
+      /*from=*/2.0f, /*to=*/3.0f, /*rows=*/2, /*cols=*/2));
 
-    HloModule module(TestName());
-    auto* computation = module.AddEntryComputation(builder.Build());
-    auto* fusion = computation->CreateFusionInstruction(
-        {sub, mul, exp, clamp, add}, HloInstruction::FusionKind::kLoop);
+  auto add =
+      HloInstruction::CreateBinary(r2f32, HloOpcode::kAdd, c1.get(), c2.get());
+  auto clamp = HloInstruction::CreateTernary(r2f32, HloOpcode::kClamp, c2.get(),
+                                             add.get(), add.get());
+  auto exp = HloInstruction::CreateUnary(r2f32, HloOpcode::kExp, add.get());
+  auto mul = HloInstruction::CreateBinary(r2f32, HloOpcode::kMultiply,
+                                          exp.get(), c3.get());
+  auto sub = HloInstruction::CreateBinary(r2f32, HloOpcode::kSubtract,
+                                          mul.get(), clamp.get());
+  auto tuple =
+      HloInstruction::CreateTuple({sub.get(), sub.get(), mul.get(), c1.get()});
 
-    // The time given these rates at i == 0 is exactly even among the properties
-    // at 1.0 seconds. For other values, one of the rates is slower so that it
-    // becomes the bottleneck.
-    HloCostAnalysis fusion_analysis(ShapeSize);
-    fusion_analysis.set_flops_per_second(16 * (i == 1 ? 1 / 2.0 : 1.0));
-    fusion_analysis.set_transcendentals_per_second(4 *
-                                                   (i == 2 ? 1 / 4.0 : 1.0));
-    fusion_analysis.set_bytes_per_second(64 * (i == 3 ? 1 / 8.0 : 1.0));
-    ASSERT_IS_OK(fusion->Accept(&fusion_analysis));
+  auto fusion = HloInstruction::CreateFusion(
+      r2f32, HloInstruction::FusionKind::kLoop, tuple.get());
+  fusion->FuseInstruction(sub.get());
+  fusion->FuseInstruction(mul.get());
+  fusion->FuseInstruction(exp.get());
+  fusion->FuseInstruction(clamp.get());
+  fusion->FuseInstruction(add.get());
 
-    EXPECT_EQ(fusion_analysis.flop_count(), 16);
-    EXPECT_EQ(fusion_analysis.transcendental_count(), 4);
-    constexpr int64 bytes_accessed = sizeof(float) * 4 * 2 * 2;
-    static_assert(bytes_accessed == 64, "");
-    EXPECT_EQ(fusion_analysis.bytes_accessed(), bytes_accessed);
+  HloCostAnalysis fusion_analysis(ShapeSize);
+  ASSERT_IS_OK(fusion->Accept(&fusion_analysis));
 
-    EXPECT_EQ(fusion_analysis.seconds(), 1 << i);
-  }
+  EXPECT_EQ(fusion_analysis.flop_count(), 16);
+  EXPECT_EQ(fusion_analysis.transcendental_count(), 4);
 }
 
 TEST_F(FusionCostAnalysis, NoLayout) {
@@ -399,21 +381,19 @@ TEST_F(FusionCostAnalysis, NoLayout) {
   Shape shape_without_layout = shape_with_layout;
   shape_without_layout.clear_layout();
 
-  HloComputation::Builder builder(TestName());
-  auto c1 = builder.AddInstruction(HloInstruction::CreateConstant(
-      Literal::CreateR4FromArray4D(Array4D<float>(2, 3, 4, 5))));
-  auto c2 = builder.AddInstruction(
-      HloInstruction::CreateConstant(Literal::CreateR1<float>({1, 2, 3})));
+  auto c1 = HloInstruction::CreateConstant(
+      LiteralUtil::CreateR4FromArray4D(Array4D<float>(2, 3, 4, 5)));
+  auto c2 =
+      HloInstruction::CreateConstant(LiteralUtil::CreateR1<float>({1, 2, 3}));
 
-  auto broadcast = builder.AddInstruction(
-      HloInstruction::CreateBroadcast(shape_without_layout, c2, {1}));
-  auto add = builder.AddInstruction(HloInstruction::CreateBinary(
-      shape_with_layout, HloOpcode::kAdd, c1, broadcast));
+  auto broadcast =
+      HloInstruction::CreateBroadcast(shape_without_layout, c2.get(), {1});
+  auto add = HloInstruction::CreateBinary(shape_with_layout, HloOpcode::kAdd,
+                                          c1.get(), broadcast.get());
 
-  HloModule module(TestName());
-  auto* computation = module.AddEntryComputation(builder.Build());
-  auto* fusion = computation->CreateFusionInstruction(
-      {add, broadcast}, HloInstruction::FusionKind::kLoop);
+  auto fusion = HloInstruction::CreateFusion(
+      shape_with_layout, HloInstruction::FusionKind::kLoop, add.get());
+  fusion->FuseInstruction(broadcast.get());
 
   HloCostAnalysis fusion_analysis(ShapeSize);
   ASSERT_IS_OK(fusion->Accept(&fusion_analysis));

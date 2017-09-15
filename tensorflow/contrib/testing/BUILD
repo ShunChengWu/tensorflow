@@ -16,7 +16,6 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
-        "//tensorflow/core:protos_all_py",
         "//tensorflow/python:summary",
         "//tensorflow/python:training",
         "//third_party/py/numpy",

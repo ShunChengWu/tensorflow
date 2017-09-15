@@ -28,12 +28,6 @@ from tensorflow.python.util import tf_inspect
 _DIVERGENCES = {}
 
 
-__all__ = [
-    "RegisterKL",
-    "kl_divergence",
-]
-
-
 def _registered_kl(type_a, type_b):
   """Get the KL function registered for classes a and b."""
   hierarchy_a = tf_inspect.getmro(type_a)

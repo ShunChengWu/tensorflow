@@ -171,7 +171,11 @@ error::Code ErrnoToCode(int err_number) {
 
 Status IOError(const string& context, int err_number) {
   auto code = ErrnoToCode(err_number);
-  return Status(code, strings::StrCat(context, "; ", strerror(err_number)));
+  if (code == error::UNKNOWN) {
+    return Status(code, strings::StrCat(context, "; ", strerror(err_number)));
+  } else {
+    return Status(code, context);
+  }
 }
 
 }  // namespace tensorflow

@@ -34,8 +34,7 @@ from tensorflow.python.training import saver as saver_lib
 from tensorflow.python.util.deprecation import deprecated
 
 
-@deprecated("2017-06-30",
-            "No longer supported. Switch to SavedModel immediately.")
+@deprecated("2017-06-30", "Please use SavedModel instead.")
 def maybe_session_bundle_dir(export_dir):
   """Checks if the model path contains session bundle model.
 
@@ -51,8 +50,7 @@ def maybe_session_bundle_dir(export_dir):
   return file_io.file_exists(meta_graph_filename)
 
 
-@deprecated("2017-06-30",
-            "No longer supported. Switch to SavedModel immediately.")
+@deprecated("2017-06-30", "Please use SavedModel instead.")
 def load_session_bundle_from_path(export_dir,
                                   target="",
                                   config=None,

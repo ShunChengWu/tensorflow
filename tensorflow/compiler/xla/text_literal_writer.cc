@@ -45,9 +45,9 @@ namespace xla {
 
   tensorflow::Status status;
   tensorflow::WritableFile* f_ptr = f.get();
-  literal.EachCellAsString(
-      [f_ptr, &status](tensorflow::gtl::ArraySlice<int64> indices,
-                       const string& value) {
+  LiteralUtil::EachCellAsString(
+      literal, [f_ptr, &status](tensorflow::gtl::ArraySlice<int64> indices,
+                                const string& value) {
         if (!status.ok()) {
           return;
         }

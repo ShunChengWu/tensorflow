@@ -55,9 +55,7 @@ class RemoteDeviceTest : public ::testing::Test {
     wi_ = worker_cache_->CreateWorker(remote_name_);
   }
 
-  ~RemoteDeviceTest() override {
-    worker_cache_->ReleaseWorker(remote_name_, wi_);
-  }
+  ~RemoteDeviceTest() { worker_cache_->ReleaseWorker(remote_name_, wi_); }
 
   void SetUp() override {
     Notification n;

@@ -43,6 +43,7 @@ from tensorflow.python.platform import test
 from tensorflow.python.platform import tf_logging
 from tensorflow.python.util import nest
 
+
 class Plus1RNNCell(rnn_lib.RNNCell):
   """RNN Cell generating (output, new_state) = (input + 1, state + 1)."""
 
@@ -73,7 +74,7 @@ class DummyMultiDimensionalLSTM(rnn_lib.RNNCell):
       without including 'Time' or 'Batch' dimensions.
     """
     if not isinstance(dims, tuple):
-      raise TypeError("The dimensions passed to DummyMultiDimensionalLSTM "
+      raise TypeError("The dimensions passed to DummyMultiDimensionalLSTM"
                       "should be a tuple of ints.")
     self._dims = dims
     self._output_size = tensor_shape.TensorShape(self._dims)
@@ -2039,9 +2040,6 @@ class RawRNNTest(test.TestCase):
       inputs_ta = tensor_array_ops.TensorArray(
           dtype=dtypes.float32, size=array_ops.shape(inputs)[0])
       inputs_ta = inputs_ta.unstack(inputs)
-      # Verify emit shapes may be unknown by feeding a placeholder that
-      # determines an emit shape.
-      unknown_dim = array_ops.placeholder(dtype=dtypes.int32)
 
       cell = rnn_cell.LSTMCell(num_units, state_is_tuple=True)
 
@@ -2049,12 +2047,12 @@ class RawRNNTest(test.TestCase):
         if cell_output is None:
           emit_output = (array_ops.zeros(
               [2, 3], dtype=dtypes.int32), array_ops.zeros(
-                  [unknown_dim], dtype=dtypes.int64))
+                  [1], dtype=dtypes.int64))
           next_state = cell.zero_state(batch_size, dtypes.float32)
         else:
           emit_output = (array_ops.ones(
               [batch_size, 2, 3], dtype=dtypes.int32), array_ops.ones(
-                  [batch_size, unknown_dim], dtype=dtypes.int64))
+                  [batch_size, 1], dtype=dtypes.int64))
           next_state = cell_state
         elements_finished = array_ops.tile([time_ >= max_time], [batch_size])
         finished = math_ops.reduce_all(elements_finished)
@@ -2071,7 +2069,7 @@ class RawRNNTest(test.TestCase):
       self.assertEqual([dtypes.int32, dtypes.int64],
                        [ta.dtype for ta in output_ta])
       output = [ta.stack() for ta in output_ta]
-      output_vals = sess.run(output, feed_dict={unknown_dim: 1})
+      output_vals = sess.run(output)
       self.assertAllEqual(
           np.ones((max_time, batch_size, 2, 3), np.int32), output_vals[0])
       self.assertAllEqual(
@@ -2207,11 +2205,10 @@ class TensorArrayOnCorrectDeviceTest(test.TestCase):
     if not test.is_gpu_available():
       return  # Test requires access to a GPU
 
-    gpu_dev = test.gpu_device_name()
     run_metadata = self._execute_rnn_on(
-        rnn_device="/cpu:0", cell_device=gpu_dev)
+        rnn_device="/cpu:0", cell_device="/gpu:0")
     step_stats = run_metadata.step_stats
-    ix = 0 if (gpu_dev in step_stats.dev_stats[0].device) else 1
+    ix = 0 if "gpu" in step_stats.dev_stats[0].device else 1
     gpu_stats = step_stats.dev_stats[ix].node_stats
     cpu_stats = step_stats.dev_stats[1 - ix].node_stats
 
@@ -2232,12 +2229,10 @@ class TensorArrayOnCorrectDeviceTest(test.TestCase):
     if not test.is_gpu_available():
       return  # Test requires access to a GPU
 
-    gpu_dev = test.gpu_device_name()
     run_metadata = self._execute_rnn_on(
-        rnn_device="/cpu:0", cell_device="/cpu:0",
-        input_device=gpu_dev)
+        rnn_device="/cpu:0", cell_device="/cpu:0", input_device="/gpu:0")
     step_stats = run_metadata.step_stats
-    ix = 0 if (gpu_dev in step_stats.dev_stats[0].device) else 1
+    ix = 0 if "gpu" in step_stats.dev_stats[0].device else 1
     gpu_stats = step_stats.dev_stats[ix].node_stats
     cpu_stats = step_stats.dev_stats[1 - ix].node_stats
 
@@ -2252,11 +2247,9 @@ class TensorArrayOnCorrectDeviceTest(test.TestCase):
     if not test.is_gpu_available():
       return  # Test requires access to a GPU
 
-    gpu_dev = test.gpu_device_name()
-    run_metadata = self._execute_rnn_on(
-        input_device=gpu_dev)
+    run_metadata = self._execute_rnn_on(input_device="/gpu:0")
     step_stats = run_metadata.step_stats
-    ix = 0 if (gpu_dev in step_stats.dev_stats[0].device) else 1
+    ix = 0 if "gpu" in step_stats.dev_stats[0].device else 1
     gpu_stats = step_stats.dev_stats[ix].node_stats
     cpu_stats = step_stats.dev_stats[1 - ix].node_stats
 

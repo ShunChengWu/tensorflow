@@ -25,7 +25,6 @@ py_library(
         "//tensorflow/python:array_ops",
         "//tensorflow/python:framework_for_generated_wrappers",
         "//tensorflow/python:platform",
-        "//tensorflow/python:util",
         "@six_archive//:six",
     ],
 )
@@ -55,11 +54,7 @@ py_library(
     name = "match",
     srcs = ["tests/match.py"],
     srcs_version = "PY2AND3",
-    deps = [
-        ":graph_editor_py",
-        "//tensorflow/python:framework_ops",
-        "@six_archive//:six",
-    ],
+    deps = [":graph_editor_py"],
 )
 
 py_test(
@@ -70,7 +65,9 @@ py_test(
         ":graph_editor_py",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform_test",
     ],
 )
 
@@ -82,7 +79,9 @@ py_test(
         ":graph_editor_py",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform_test",
     ],
 )
 
@@ -91,10 +90,13 @@ py_test(
     srcs = ["tests/match_test.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":graph_editor_py",
         ":match",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform_test",
     ],
 )
 
@@ -106,7 +108,9 @@ py_test(
         ":graph_editor_py",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform_test",
     ],
 )
 
@@ -119,7 +123,9 @@ py_test(
         ":match",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform_test",
     ],
 )
 
@@ -132,7 +138,9 @@ py_test(
         ":match",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:framework_for_generated_wrappers",
+        "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform_test",
     ],
 )
 
@@ -148,8 +156,9 @@ py_test(
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:control_flow_ops",
         "//tensorflow/python:framework_for_generated_wrappers",
-        "//tensorflow/python:gradients",
+        "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:math_ops",
+        "//tensorflow/python:platform_test",
         "//tensorflow/python:variables",
         "//third_party/py/numpy",
     ],

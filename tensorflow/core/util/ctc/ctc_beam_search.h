@@ -285,14 +285,17 @@ void CTCBeamSearchDecoder<CTCBeamState, CTCBeamComparer>::Step(
       continue;
     }
 
-    for (int ind = 0; ind < num_classes_ - 1; ind++) {
-      // Perform label selection: if input for this label looks very
-      // unpromising, never evaluate it with a scorer.
-      if (input(ind) < label_selection_input_min) {
-        continue;
-      }
-      BeamEntry& c = b->GetChild(ind);
+    if (!b->HasChildren()) {
+      b->PopulateChildren(num_classes_ - 1);
+    }
+
+    for (BeamEntry& c : *b->Children()) {
       if (!c.Active()) {
+        // Perform label selection: if input for this label looks very
+        // unpromising, never evaluate it with a scorer.
+        if (input(c.label) < label_selection_input_min) {
+          continue;
+        }
         //   Pblank(l=abcd @ t=6) = 0
         c.newp.blank = kLogZero;
         // If new child label is identical to beam label:
@@ -307,23 +310,21 @@ void CTCBeamSearchDecoder<CTCBeamState, CTCBeamComparer>::Step(
         c.newp.total = c.newp.label;
 
         if (is_candidate(c.newp)) {
-          // Before adding the new node to the beam, check if the beam
-          // is already at maximum width.
+          BeamEntry* bottom = leaves_.peek_bottom();
+          leaves_.push(&c);
           if (leaves_.size() == beam_width_) {
             // Bottom is no longer in the beam search.  Reset
             // its probability; signal it's no longer in the beam search.
-            BeamEntry* bottom = leaves_.peek_bottom();
             bottom->newp.Reset();
           }
-          leaves_.push(&c);
         } else {
-          // Deactivate child.
+          // Deactivate child (signal it's not in the beam)
           c.oldp.Reset();
           c.newp.Reset();
         }
-      }
-    }
-  }  // for (BeamEntry* b...
+      }  // if (!c.Active()) ...
+    }    // for (BeamEntry& c in children...
+  }      // for (BeamEntry* b...
 }
 
 template <typename CTCBeamState, typename CTCBeamComparer>
@@ -332,7 +333,7 @@ void CTCBeamSearchDecoder<CTCBeamState, CTCBeamComparer>::Reset() {
 
   // This beam root, and all of its children, will be in memory until
   // the next reset.
-  beam_root_.reset(new BeamEntry(nullptr, -1));
+  beam_root_.reset(new BeamEntry(nullptr, -1, num_classes_ - 1, -1));
   beam_root_->newp.total = 0.0;  // ln(1)
   beam_root_->newp.blank = 0.0;  // ln(1)
 

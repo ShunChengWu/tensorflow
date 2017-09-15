@@ -195,9 +195,8 @@ def entropy_shannon(p,
     # Sample path
     if entropy is None:
       logging.info('Using sampled entropy(p:%s)', p)
-      if z is None:
-        z = p.sample(n, seed=seed)
-      entropy = -monte_carlo.expectation(p.log_prob, z)
+      entropy = -1. * monte_carlo.expectation(
+          p.log_prob, p, z=z, n=n, seed=seed)
 
     return entropy
 

@@ -3,16 +3,9 @@ licenses(["notice"])  # MIT
 exports_files(["COPYING"])
 
 config_setting(
-    name = "windows_msvc",
-    values = {
-        "cpu": "x64_windows_msvc",
-    },
-)
-
-config_setting(
     name = "windows",
     values = {
-        "cpu": "x64_windows",
+        "cpu": "x64_windows_msvc",
     },
 )
 
@@ -23,7 +16,6 @@ cc_library(
     # Disable __builtin_expect support on Windows
     copts = select({
         ":windows": ["/DFARMHASH_OPTIONAL_BUILTIN_EXPECT"],
-        ":windows_msvc": ["/DFARMHASH_OPTIONAL_BUILTIN_EXPECT"],
         "//conditions:default": [],
     }),
     includes = ["src/."],

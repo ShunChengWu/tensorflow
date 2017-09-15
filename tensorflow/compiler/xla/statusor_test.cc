@@ -29,6 +29,8 @@ limitations under the License.
 namespace xla {
 namespace {
 
+using tensorflow::Status;
+
 class Base1 {
  public:
   virtual ~Base1() {}
@@ -43,7 +45,7 @@ class Base2 {
 
 class Derived : public Base1, public Base2 {
  public:
-  ~Derived() override {}
+  virtual ~Derived() {}
   int evenmorepad;
 };
 
@@ -57,14 +59,6 @@ class CopyNoAssign {
   const CopyNoAssign& operator=(const CopyNoAssign&);
 };
 
-class NoDefaultConstructor {
- public:
-  explicit NoDefaultConstructor(int foo);
-};
-
-static_assert(!std::is_default_constructible<NoDefaultConstructor>(),
-              "Should not be default-constructible.");
-
 StatusOr<std::unique_ptr<int>> ReturnUniquePtr() {
   // Uses implicit constructor from T&&
   return std::unique_ptr<int>(new int(0));
@@ -73,18 +67,6 @@ StatusOr<std::unique_ptr<int>> ReturnUniquePtr() {
 TEST(StatusOr, ElementType) {
   static_assert(std::is_same<StatusOr<int>::element_type, int>(), "");
   static_assert(std::is_same<StatusOr<char>::element_type, char>(), "");
-}
-
-TEST(StatusOr, TestNoDefaultConstructorInitialization) {
-  // Explicitly initialize it with an error code.
-  StatusOr<NoDefaultConstructor> statusor(tensorflow::errors::Cancelled(""));
-  EXPECT_FALSE(statusor.ok());
-  EXPECT_EQ(statusor.status().code(), tensorflow::error::CANCELLED);
-
-  // Default construction of StatusOr initializes it with an UNKNOWN error code.
-  StatusOr<NoDefaultConstructor> statusor2;
-  EXPECT_FALSE(statusor2.ok());
-  EXPECT_EQ(statusor2.status().code(), tensorflow::error::UNKNOWN);
 }
 
 TEST(StatusOr, TestMoveOnlyInitialization) {
@@ -454,17 +436,17 @@ class BenchmarkFactory {
   }
 
   Status ArgumentFactoryFail(T** result) TF_ATTRIBUTE_NOINLINE {
-    *result = nullptr;
+    *result = NULL;
     return Status(tensorflow::error::CANCELLED, "");
   }
 
   Status ArgumentFactoryFailShortMsg(T** result) TF_ATTRIBUTE_NOINLINE {
-    *result = nullptr;
+    *result = NULL;
     return Status(::tensorflow::error::INTERNAL, "");
   }
 
   Status ArgumentFactoryFailLongMsg(T** result) TF_ATTRIBUTE_NOINLINE {
-    *result = nullptr;
+    *result = NULL;
     return Status(::tensorflow::error::INTERNAL,
                   "a big string of message junk that will never be read");
   }
@@ -507,30 +489,26 @@ class BenchmarkType {
 
 // Calibrate the amount of time spent just calling DoWork, since each of our
 // tests will do this, we can subtract this out of benchmark results.
-void BM_CalibrateWorkLoop(int iters) {
+static void BM_CalibrateWorkLoop(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   BenchmarkType* result = factory.TrivialFactory();
   tensorflow::testing::StartTiming();
   for (int i = 0; i != iters; ++i) {
-    if (result != nullptr) {
-      result->DoWork();
-    }
+    if (result != NULL) result->DoWork();
   }
 }
 BENCHMARK(BM_CalibrateWorkLoop);
 
 // Measure the time taken to call into the factory, return the value,
 // determine that it is OK, and invoke a trivial function.
-void BM_TrivialFactory(int iters) {
+static void BM_TrivialFactory(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
   for (int i = 0; i != iters; ++i) {
     BenchmarkType* result = factory.TrivialFactory();
-    if (result != nullptr) {
-      result->DoWork();
-    }
+    if (result != NULL) result->DoWork();
   }
 }
 BENCHMARK(BM_TrivialFactory);
@@ -538,14 +516,14 @@ BENCHMARK(BM_TrivialFactory);
 // Measure the time taken to call into the factory, providing an
 // out-param for the result, evaluating the status result and the
 // result pointer, and invoking the trivial function.
-void BM_ArgumentFactory(int iters) {
+static void BM_ArgumentFactory(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
   for (int i = 0; i != iters; ++i) {
-    BenchmarkType* result = nullptr;
+    BenchmarkType* result = NULL;
     Status status = factory.ArgumentFactory(&result);
-    if (status.ok() && result != nullptr) {
+    if (status.ok() && result != NULL) {
       result->DoWork();
     }
   }
@@ -554,7 +532,7 @@ BENCHMARK(BM_ArgumentFactory);
 
 // Measure the time to use the StatusOr<T*> factory, evaluate the result,
 // and invoke the trivial function.
-void BM_StatusOrFactory(int iters) {
+static void BM_StatusOrFactory(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
@@ -570,14 +548,14 @@ BENCHMARK(BM_StatusOrFactory);
 // Measure the time taken to call into the factory, providing an
 // out-param for the result, evaluating the status result and the
 // result pointer, and invoking the trivial function.
-void BM_ArgumentFactoryFail(int iters) {
+static void BM_ArgumentFactoryFail(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
   for (int i = 0; i != iters; ++i) {
-    BenchmarkType* result = nullptr;
+    BenchmarkType* result = NULL;
     Status status = factory.ArgumentFactoryFail(&result);
-    if (status.ok() && result != nullptr) {
+    if (status.ok() && result != NULL) {
       result->DoWork();
     }
   }
@@ -586,7 +564,7 @@ BENCHMARK(BM_ArgumentFactoryFail);
 
 // Measure the time to use the StatusOr<T*> factory, evaluate the result,
 // and invoke the trivial function.
-void BM_StatusOrFactoryFail(int iters) {
+static void BM_StatusOrFactoryFail(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
@@ -602,14 +580,14 @@ BENCHMARK(BM_StatusOrFactoryFail);
 // Measure the time taken to call into the factory, providing an
 // out-param for the result, evaluating the status result and the
 // result pointer, and invoking the trivial function.
-void BM_ArgumentFactoryFailShortMsg(int iters) {
+static void BM_ArgumentFactoryFailShortMsg(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
   for (int i = 0; i != iters; ++i) {
-    BenchmarkType* result = nullptr;
+    BenchmarkType* result = NULL;
     Status status = factory.ArgumentFactoryFailShortMsg(&result);
-    if (status.ok() && result != nullptr) {
+    if (status.ok() && result != NULL) {
       result->DoWork();
     }
   }
@@ -618,7 +596,7 @@ BENCHMARK(BM_ArgumentFactoryFailShortMsg);
 
 // Measure the time to use the StatusOr<T*> factory, evaluate the result,
 // and invoke the trivial function.
-void BM_StatusOrFactoryFailShortMsg(int iters) {
+static void BM_StatusOrFactoryFailShortMsg(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
@@ -634,14 +612,14 @@ BENCHMARK(BM_StatusOrFactoryFailShortMsg);
 // Measure the time taken to call into the factory, providing an
 // out-param for the result, evaluating the status result and the
 // result pointer, and invoking the trivial function.
-void BM_ArgumentFactoryFailLongMsg(int iters) {
+static void BM_ArgumentFactoryFailLongMsg(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();
   for (int i = 0; i != iters; ++i) {
-    BenchmarkType* result = nullptr;
+    BenchmarkType* result = NULL;
     Status status = factory.ArgumentFactoryFailLongMsg(&result);
-    if (status.ok() && result != nullptr) {
+    if (status.ok() && result != NULL) {
       result->DoWork();
     }
   }
@@ -650,7 +628,7 @@ BENCHMARK(BM_ArgumentFactoryFailLongMsg);
 
 // Measure the time to use the StatusOr<T*> factory, evaluate the result,
 // and invoke the trivial function.
-void BM_StatusOrFactoryFailLongMsg(int iters) {
+static void BM_StatusOrFactoryFailLongMsg(int iters) {
   tensorflow::testing::StopTiming();
   BenchmarkFactory<BenchmarkType> factory;
   tensorflow::testing::StartTiming();

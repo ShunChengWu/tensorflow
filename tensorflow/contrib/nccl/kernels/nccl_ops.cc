@@ -15,11 +15,10 @@ limitations under the License.
 
 #if GOOGLE_CUDA
 
-#include <memory>
 #include <unordered_map>
 #include <vector>
 
-#include "src/nccl.h"
+#include "external/nccl_archive/src/nccl.h"
 #include "tensorflow/contrib/nccl/kernels/nccl_manager.h"
 #include "tensorflow/core/framework/op_kernel.h"
 
@@ -39,7 +38,7 @@ namespace tensorflow {
 //    when the async op kernel's done callback is called.
 class NcclAsyncOpBase : public AsyncOpKernel {
  public:
-  explicit NcclAsyncOpBase(OpKernelConstruction* c) : AsyncOpKernel(c) {
+  NcclAsyncOpBase(OpKernelConstruction* c) : AsyncOpKernel(c) {
     OP_REQUIRES_OK(c, c->GetAttr("num_devices", &num_devices_));
     OP_REQUIRES_OK(c, c->GetAttr("shared_name", &collective_prefix_));
   }
@@ -59,9 +58,11 @@ class NcclAsyncOpBase : public AsyncOpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(NcclAsyncOpBase);
 };
 
-class NcclReduceOpBase : public NcclAsyncOpBase {
+// To execute a single all-reduce, this kernel is called once for each of the
+// <k> devices in the communicator.
+class NcclAllReduceOpKernel : public NcclAsyncOpBase {
  public:
-  explicit NcclReduceOpBase(OpKernelConstruction* c) : NcclAsyncOpBase(c) {
+  NcclAllReduceOpKernel(OpKernelConstruction* c) : NcclAsyncOpBase(c) {
     string reduction;
     OP_REQUIRES_OK(c, c->GetAttr("reduction", &reduction));
     if (reduction == "min") {
@@ -78,19 +79,6 @@ class NcclReduceOpBase : public NcclAsyncOpBase {
     }
   }
 
-  ncclRedOp_t reduction_op() const { return reduction_op_; }
-
- private:
-  ncclRedOp_t reduction_op_;
-};
-
-// To execute a single all-reduce, this kernel is called once for each of the
-// <k> devices in the communicator.
-class NcclAllReduceOpKernel : public NcclReduceOpBase {
- public:
-  explicit NcclAllReduceOpKernel(OpKernelConstruction* c)
-      : NcclReduceOpBase(c) {}
-
   void ComputeAsync(OpKernelContext* c, DoneCallback done) override {
     const Tensor* in_t = &c->input(0);
     Tensor* out_t;
@@ -104,85 +92,21 @@ class NcclAllReduceOpKernel : public NcclReduceOpBase {
     auto* compute_stream = c->op_device_context()->stream();
     auto* gpu_info = c->device()->tensorflow_gpu_device_info();
     NcclManager::instance()->AddToAllReduce(
-        num_devices(), GetCollectiveKey(c), reduction_op(),
+        num_devices(), GetCollectiveKey(c), reduction_op_,
         compute_stream->parent(), gpu_info->gpu_id, gpu_info->event_mgr,
-        compute_stream, in_t, out_t, std::move(actual_done));
-  }
-};
-REGISTER_KERNEL_BUILDER(Name("NcclAllReduce").Device(DEVICE_GPU),
-                        NcclAllReduceOpKernel);
-
-// To execute a single reduce, this kernel is called once for all but one of the
-// <k> devices in the communicator, and NcclReduceRecvKernel is called once for
-// the remaining device.
-class NcclReduceSendKernel : public NcclReduceOpBase {
- public:
-  explicit NcclReduceSendKernel(OpKernelConstruction* c)
-      : NcclReduceOpBase(c) {}
-
-  void ComputeAsync(OpKernelContext* c, DoneCallback done) override {
-    const Tensor& in_t = c->input(0);
-    std::unique_ptr<Tensor> temp_ptr(new Tensor());
-    OP_REQUIRES_OK_ASYNC(
-        c, c->allocate_temp(in_t.dtype(), in_t.shape(), temp_ptr.get()), done);
-    Tensor* temp_t = temp_ptr.release();
-
-    auto actual_done = [c, done, temp_t](Status s) {
-      delete temp_t;
-      OP_REQUIRES_OK_ASYNC(c, s, done);
-      done();
-    };
-
-    auto* compute_stream = c->op_device_context()->stream();
-    auto* gpu_info = c->device()->tensorflow_gpu_device_info();
-    NcclManager::instance()->AddReduceSend(
-        num_devices(), GetCollectiveKey(c), reduction_op(),
-        compute_stream->parent(), gpu_info->gpu_id, gpu_info->event_mgr,
-        compute_stream, &in_t, temp_t, std::move(actual_done));
-  }
-};
-REGISTER_KERNEL_BUILDER(Name("NcclReduceSend").Device(DEVICE_GPU),
-                        NcclReduceSendKernel);
-
-// To execute a single reduce, this kernel is called once for one devices, and
-// NcclReduceSendKernel is called for all other <k-1> devices in the
-// communicator.
-class NcclReduceRecvKernel : public NcclReduceOpBase {
- public:
-  explicit NcclReduceRecvKernel(OpKernelConstruction* c)
-      : NcclReduceOpBase(c) {}
-
-  void ComputeAsync(OpKernelContext* c, DoneCallback done) override {
-    const Tensor& in_t = c->input(0);
-    Tensor* out_t;
-    OP_REQUIRES_OK_ASYNC(c, c->allocate_output(0, in_t.shape(), &out_t), done);
-
-    auto actual_done = [c, done](Status s) {
-      OP_REQUIRES_OK_ASYNC(c, s, done);
-      done();
-    };
-
-    auto* compute_stream = c->op_device_context()->stream();
-    auto* gpu_info = c->device()->tensorflow_gpu_device_info();
-    NcclManager::instance()->AddReduceRecv(
-        num_devices(), GetCollectiveKey(c), reduction_op(),
-        compute_stream->parent(), gpu_info->gpu_id, gpu_info->event_mgr,
-        compute_stream, &in_t, out_t, std::move(actual_done));
+        compute_stream, in_t, out_t, actual_done);
   }
 
  private:
   ncclRedOp_t reduction_op_;
 };
-REGISTER_KERNEL_BUILDER(Name("NcclReduceRecv").Device(DEVICE_GPU),
-                        NcclReduceRecvKernel);
 
-// To execute a single broadcast, this kernel is called once for one device, and
-// NcclBroadcastRecvKernel is called for all other <k-1> devices in the
-// communicator.
+REGISTER_KERNEL_BUILDER(Name("NcclAllReduce").Device(DEVICE_GPU),
+                        NcclAllReduceOpKernel);
+
 class NcclBroadcastSendKernel : public NcclAsyncOpBase {
  public:
-  explicit NcclBroadcastSendKernel(OpKernelConstruction* c)
-      : NcclAsyncOpBase(c) {}
+  NcclBroadcastSendKernel(OpKernelConstruction* c) : NcclAsyncOpBase(c) {}
 
   void ComputeAsync(OpKernelContext* c, DoneCallback done) override {
     auto actual_done = [c, done](Status s) {
@@ -201,13 +125,9 @@ class NcclBroadcastSendKernel : public NcclAsyncOpBase {
 REGISTER_KERNEL_BUILDER(Name("NcclBroadcastSend").Device(DEVICE_GPU),
                         NcclBroadcastSendKernel);
 
-// To execute a single broadcast, this kernel is called once for all but one of
-// the <k> devices in the communicator, and NcclBroadcastSendKernel is called
-// once for the remaining device.
 class NcclBroadcastRecvKernel : public NcclAsyncOpBase {
  public:
-  explicit NcclBroadcastRecvKernel(OpKernelConstruction* c)
-      : NcclAsyncOpBase(c) {}
+  NcclBroadcastRecvKernel(OpKernelConstruction* c) : NcclAsyncOpBase(c) {}
 
   void ComputeAsync(OpKernelContext* c, DoneCallback done) override {
     const Tensor& shape_t = c->input(0);

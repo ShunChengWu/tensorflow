@@ -28,6 +28,10 @@ class TensorProto;
 
 class VerbsUtil {
  public:
+  // synchronous wrapper of SetProtoFromGPU
+  static Status SetProtoFromGPUSync(const Tensor& tensor, Device* dev,
+                                    const DeviceContext* device_context,
+                                    TensorProto* proto, bool is_dead);
   static string AppendStepidToKey(const string& key, int64 step_id);
   static void GetKeyAndStepId(const string& key_with_step_id, string& key,
                               int64& step_id);

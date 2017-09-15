@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <utility>
 
-#include "tensorflow/core/framework/versions.pb.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/io/table_builder.h"
 #include "tensorflow/core/lib/random/random.h"

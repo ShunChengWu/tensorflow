@@ -18,7 +18,6 @@ limitations under the License.
 
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/framework/numeric_types.h"
-#include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/tensor_types.h"
 
 namespace tensorflow {
@@ -27,8 +26,7 @@ namespace functor {
 template <typename Device, typename T>
 struct CropAndResize {
   // We assume that the tensor sizes are correct.
-  bool operator()(const OpKernelContext* context,
-                  typename TTypes<T, 4>::ConstTensor image,
+  bool operator()(const Device& d, typename TTypes<T, 4>::ConstTensor image,
                   typename TTypes<float, 2>::ConstTensor boxes,
                   typename TTypes<int32, 1>::ConstTensor box_ind,
                   float extrapolation_value,

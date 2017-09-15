@@ -17,7 +17,7 @@ limitations under the License.
 // libxsmm is not available.
 
 #ifndef TENSORFLOW_USE_LIBXSMM
-void dummy_xsmm_conv2d_ensure_file_is_not_empty();
+void dummy_xsmm_conv2d_ensure_file_is_not_empty(void);
 #else
 
 #define USE_EIGEN_TENSOR
@@ -131,7 +131,32 @@ class libxsmm_dnn_conv_desc_wrap {
 
 struct HashFunction {
   std::size_t operator()(const libxsmm_dnn_conv_desc_wrap& w) const {
-    return libxsmm_hash(&w.d, sizeof(w.d), 25071975);
+    // unsigned char ptr[sizeof(&w.d)];
+
+    // memcpy(ptr, (unsigned char *)&w.d, sizeof(&w.d))
+
+    //
+    /*
+    std::ostringstream N,C,H,W,K,R,S,u,v,padh,padw;
+
+    N << w.d.N; C << w.d.C;
+    H << w.d.H; W << w.d.W;
+    K << w.d.K; R << w.d.R;
+    S << w.d.S; u << w.d.u;
+    v << w.d.v; padh << w.d.pad_h_in;
+    padw << w.d.pad_w_in;
+ 
+ 
+    std::string out_ =   N.str() + C.str()\
+                       + H.str() + W.str()\
+                       + K.str() + R.str()\
+                       + S.str() + u.str()\
+                       + v.str() + padh.str()\
+                       + padw.str();
+    //
+    //
+    */
+    return (std::hash<unsigned long long>()((unsigned long long)&(w.d)));
   }
 };
 
@@ -196,6 +221,8 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
 
   status = libxsmm_dnn_get_codegen_success(libxsmm_handle, kind);
   if (status == LIBXSMM_DNN_WARN_FALLBACK) {
+    chk_libxsmm_err(libxsmm_dnn_destroy_conv_layer(libxsmm_handle),
+                    "Destroy handle");
     return false;  // Use non-libxsmm code
   }
   chk_libxsmm_err(status, "Check codegen status");
@@ -297,6 +324,8 @@ static bool CallLibxsmmConvGeneric(OpKernelContext* ctx,
     chk_libxsmm_err(status, "Link filter");
   }
   if (kind == LIBXSMM_DNN_COMPUTE_KIND_FWD) {
+    chk_libxsmm_err(libxsmm_dnn_zero_buffer(libxsmm_output), "Zero output");
+
     chk_libxsmm_err(libxsmm_dnn_bind_buffer(libxsmm_handle, libxsmm_input,
                                             LIBXSMM_DNN_REGULAR_INPUT),
                     "Bind input forward");

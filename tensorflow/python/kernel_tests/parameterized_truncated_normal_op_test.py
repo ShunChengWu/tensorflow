@@ -104,6 +104,7 @@ def z_test(real, expected, i, num_samples):
 
 
 class ParameterizedTruncatedNormalTest(test.TestCase):
+  _use_gpu = False
   z_limit = 6.0
 
   # Stop at moment 10 to avoid numerical errors in the theoretical moments.
@@ -115,7 +116,7 @@ class ParameterizedTruncatedNormalTest(test.TestCase):
       # Give up early if we are unable to import it.
       import scipy.stats  # pylint: disable=g-import-not-at-top,unused-variable
       random_seed.set_random_seed(seed)
-      with self.test_session(use_gpu=True):
+      with self.test_session(use_gpu=self._use_gpu):
         samples = random_ops.parameterized_truncated_normal(shape, mean, stddev,
                                                             minval,
                                                             maxval).eval()
@@ -139,7 +140,7 @@ class ParameterizedTruncatedNormalTest(test.TestCase):
     try:
       import scipy.stats  # pylint: disable=g-import-not-at-top
       random_seed.set_random_seed(seed)
-      with self.test_session(use_gpu=True):
+      with self.test_session(use_gpu=self._use_gpu):
         samples = random_ops.parameterized_truncated_normal(shape, mean, stddev,
                                                             minval,
                                                             maxval).eval()
@@ -181,6 +182,10 @@ class ParameterizedTruncatedNormalTest(test.TestCase):
 
   def testSmallStddev(self):
     self.validateKolmogorovSmirnov([10**5], 0.0, 0.1, 0.05, 0.10)
+
+
+class ParameterizedTruncatedNormalGpuTest(ParameterizedTruncatedNormalTest):
+  _use_gpu = True
 
 
 # Benchmarking code

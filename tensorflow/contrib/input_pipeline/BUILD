@@ -82,10 +82,9 @@ py_test(
     srcs_version = "PY2AND3",
     deps = [
         ":input_pipeline_py",
-        "//tensorflow/python:client_testlib",
-        "//tensorflow/python:constant_op",
-        "//tensorflow/python:dtypes",
-        "//tensorflow/python:errors",
+        "//tensorflow:tensorflow_py",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python:platform_test",
         "//tensorflow/python:state_ops",
         "//tensorflow/python:variables",
     ],

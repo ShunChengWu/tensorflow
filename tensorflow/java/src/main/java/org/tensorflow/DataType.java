@@ -53,14 +53,12 @@ public enum DataType {
   int c() {
     return value;
   }
-  
-  // Cached to avoid copying it
-  final private static DataType[] values = values();
 
   static DataType fromC(int c) {
-    for (DataType t : values) {
-      if (t.value == c)
+    for (DataType t : DataType.values()) {
+      if (t.c() == c) {
         return t;
+      }
     }
     throw new IllegalArgumentException(
         "DataType " + c + " is not recognized in Java (version " + TensorFlow.version() + ")");

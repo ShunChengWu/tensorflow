@@ -28,6 +28,7 @@ using ::tensorflow::protobuf::EnumDescriptor;
 using ::tensorflow::protobuf::FieldDescriptor;
 using ::tensorflow::protobuf::FieldOptions;
 using ::tensorflow::protobuf::FileDescriptor;
+using ::tensorflow::protobuf::OneofDescriptor;
 
 namespace tensorflow {
 
@@ -58,7 +59,7 @@ string StrAppend(string* to_append, const Args&... args) {
 // the field names (it's a loop over all names), and tracking of has_seen.
 class Generator {
  public:
-  explicit Generator(const string& tf_header_prefix)
+  Generator(const string& tf_header_prefix)
       : tf_header_prefix_(tf_header_prefix),
         header_(&code_.header),
         header_impl_(&code_.header_impl),
@@ -71,7 +72,7 @@ class Generator {
 
  private:
   struct Section {
-    explicit Section(string* str) : str(str) {}
+    Section(string* str) : str(str) {}
     string* str;
     string indent;
   };
@@ -634,7 +635,6 @@ void Generator::AppendDebugStringFunctions(const Descriptor& md) {
   Print().Print("namespace internal {").Print();
   Print(sig, " {").Nest();
   std::vector<const FieldDescriptor*> fields;
-  fields.reserve(md.field_count());
   for (int i = 0; i < md.field_count(); ++i) {
     fields.push_back(md.field(i));
   }

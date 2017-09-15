@@ -25,7 +25,11 @@
 
 namespace tensorflow {
 
+using shape_inference::Dimension;
+using shape_inference::InferenceContext;
+using shape_inference::Shape;
 using tensorforest::CheckTensorBounds;
+
 
 class ScatterAddNdim : public OpKernel {
  public:

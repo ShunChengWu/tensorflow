@@ -21,14 +21,14 @@ namespace tensorflow {
 
 namespace {
 
-// See documentation in ../ops/dataset_ops.cc for a high-level
+// See documentation in ../ops/iterator_ops.cc for a high-level
 // description of the following op.
 
-class TensorDatasetOp : public DatasetOpKernel {
+class TensorDatasetOp : public OpKernel {
  public:
-  explicit TensorDatasetOp(OpKernelConstruction* ctx) : DatasetOpKernel(ctx) {}
+  explicit TensorDatasetOp(OpKernelConstruction* ctx) : OpKernel(ctx) {}
 
-  void MakeDataset(OpKernelContext* ctx, DatasetBase** output) override {
+  void Compute(OpKernelContext* ctx) override {
     // Create a new TensorDatasetOp::Dataset, insert it in the step
     // container, and return it as the output.
     OpInputList inputs;
@@ -40,7 +40,13 @@ class TensorDatasetOp : public DatasetOpKernel {
     for (const Tensor& t : inputs) {
       components.push_back(t);
     }
-    *output = new Dataset(std::move(components));
+    DatasetBase* dataset = new Dataset(std::move(components));
+    Tensor* output = nullptr;
+    OP_REQUIRES_OK(ctx, ctx->allocate_output(0, TensorShape({}), &output));
+    ResourceHandle handle = MakeResourceHandle<DatasetBase>(
+        ctx, ctx->step_container()->name(), name());
+    OP_REQUIRES_OK(ctx, CreateResource(ctx, handle, dataset));
+    output->flat<ResourceHandle>()(0) = handle;
   }
 
  private:
@@ -54,10 +60,8 @@ class TensorDatasetOp : public DatasetOpKernel {
       }
     }
 
-    std::unique_ptr<IteratorBase> MakeIterator(
-        const string& prefix) const override {
-      return std::unique_ptr<IteratorBase>(
-          new Iterator({this, strings::StrCat(prefix, "::FromTensor")}));
+    std::unique_ptr<IteratorBase> MakeIterator() const override {
+      return std::unique_ptr<IteratorBase>(new Iterator(this));
     }
 
     const DataTypeVector& output_dtypes() const override { return dtypes_; }
@@ -70,12 +74,11 @@ class TensorDatasetOp : public DatasetOpKernel {
    private:
     class Iterator : public DatasetIterator<Dataset> {
      public:
-      explicit Iterator(const Params& params)
-          : DatasetIterator<Dataset>(params), produced_(false) {}
+      explicit Iterator(const Dataset* dataset)
+          : DatasetIterator<Dataset>(dataset), produced_(false) {}
 
-      Status GetNextInternal(IteratorContext* ctx,
-                             std::vector<Tensor>* out_tensors,
-                             bool* end_of_sequence) override {
+      Status GetNext(IteratorContext* ctx, std::vector<Tensor>* out_tensors,
+                     bool* end_of_sequence) override {
         mutex_lock l(mu_);
         if (!produced_) {
           *out_tensors = dataset()->tensors_;

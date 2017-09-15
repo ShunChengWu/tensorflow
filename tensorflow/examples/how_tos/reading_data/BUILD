@@ -14,6 +14,7 @@ py_binary(
     deps = [
         "//tensorflow:tensorflow_py",
         "//tensorflow/contrib/learn/python/learn/datasets",
+        "//tensorflow/examples/tutorials/mnist:input_data",
     ],
 )
 

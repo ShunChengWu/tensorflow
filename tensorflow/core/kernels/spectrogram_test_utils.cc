@@ -18,6 +18,7 @@ limitations under the License.
 #include <math.h>
 #include <stddef.h>
 
+#include "tensorflow/core/lib/core/error_codes.pb.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/lib/io/path.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -99,7 +100,7 @@ void ReadCSVFileToComplexVectorOrDie(
   }
   std::vector<string> lines = str_util::Split(data_string, '\n');
   for (const string& line : lines) {
-    if (line.empty()) {
+    if (line == "") {
       continue;
     }
     std::vector<std::complex<double> > data_line;

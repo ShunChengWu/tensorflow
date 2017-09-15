@@ -60,7 +60,7 @@ class BucketizationOpTest(test.TestCase):
 
   def testBoundariesNotList(self):
     with self.assertRaisesRegexp(
-        TypeError, "Expected list.*"):
+        TypeError, "Expected list for attr boundaries"):
       math_ops._bucketize(constant_op.constant([-5, 0]), boundaries=0)
 
 

@@ -252,8 +252,6 @@ Status HttpRequest::SetPutFromFile(const string& body_filepath, size_t offset) {
   libcurl_->curl_easy_setopt(curl_, CURLOPT_PUT, 1);
   libcurl_->curl_easy_setopt(curl_, CURLOPT_READDATA,
                              reinterpret_cast<void*>(put_body_));
-  // Using the default CURLOPT_READFUNCTION, which is doing an fread() on the
-  // FILE * userdata set with CURLOPT_READDATA.
   return Status::OK();
 }
 
@@ -265,8 +263,6 @@ Status HttpRequest::SetPutEmptyBody() {
   libcurl_->curl_easy_setopt(curl_, CURLOPT_PUT, 1);
   curl_headers_ =
       libcurl_->curl_slist_append(curl_headers_, "Content-Length: 0");
-  libcurl_->curl_easy_setopt(curl_, CURLOPT_READDATA,
-                             reinterpret_cast<void*>(this));
   libcurl_->curl_easy_setopt(curl_, CURLOPT_READFUNCTION,
                              &HttpRequest::ReadCallback);
   return Status::OK();
@@ -296,8 +292,6 @@ Status HttpRequest::SetPostEmptyBody() {
   libcurl_->curl_easy_setopt(curl_, CURLOPT_POST, 1);
   curl_headers_ =
       libcurl_->curl_slist_append(curl_headers_, "Content-Length: 0");
-  libcurl_->curl_easy_setopt(curl_, CURLOPT_READDATA,
-                             reinterpret_cast<void*>(this));
   libcurl_->curl_easy_setopt(curl_, CURLOPT_READFUNCTION,
                              &HttpRequest::ReadCallback);
   return Status::OK();

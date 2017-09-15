@@ -31,8 +31,9 @@ namespace xla {
 namespace {
 
 TEST(LiteralTestUtilTest, ComparesEqualTuplesEqual) {
-  std::unique_ptr<Literal> literal = Literal::MakeTuple({
-      Literal::CreateR0<int32>(42).get(), Literal::CreateR0<int32>(64).get(),
+  std::unique_ptr<Literal> literal = LiteralUtil::MakeTuple({
+      LiteralUtil::CreateR0<int32>(42).get(),
+      LiteralUtil::CreateR0<int32>(64).get(),
   });
   LiteralTestUtil::ExpectEqual(*literal, *literal);
 }
@@ -42,11 +43,13 @@ TEST(LiteralTestUtilTest, ComparesUnequalTuplesUnequal) {
   // un-fail an assertion failure. The CHECK-failure is death, so we can make a
   // death assertion.
   auto unequal_things_are_equal = [] {
-    std::unique_ptr<Literal> lhs = Literal::MakeTuple({
-        Literal::CreateR0<int32>(42).get(), Literal::CreateR0<int32>(64).get(),
+    std::unique_ptr<Literal> lhs = LiteralUtil::MakeTuple({
+        LiteralUtil::CreateR0<int32>(42).get(),
+        LiteralUtil::CreateR0<int32>(64).get(),
     });
-    std::unique_ptr<Literal> rhs = Literal::MakeTuple({
-        Literal::CreateR0<int32>(64).get(), Literal::CreateR0<int32>(42).get(),
+    std::unique_ptr<Literal> rhs = LiteralUtil::MakeTuple({
+        LiteralUtil::CreateR0<int32>(64).get(),
+        LiteralUtil::CreateR0<int32>(42).get(),
     });
     CHECK(LiteralTestUtil::Equal(*lhs, *rhs)) << "LHS and RHS are unequal";
   };
@@ -55,8 +58,8 @@ TEST(LiteralTestUtilTest, ComparesUnequalTuplesUnequal) {
 
 TEST(LiteralTestUtilTest, ExpectNearFailurePlacesResultsInTemporaryDirectory) {
   auto dummy_lambda = [] {
-    auto two = Literal::CreateR0<float>(2);
-    auto four = Literal::CreateR0<float>(4);
+    auto two = LiteralUtil::CreateR0<float>(2);
+    auto four = LiteralUtil::CreateR0<float>(4);
     ErrorSpec error(0.001);
     CHECK(LiteralTestUtil::Near(*two, *four, error)) << "two is not near four";
   };
@@ -80,16 +83,15 @@ TEST(LiteralTestUtilTest, ExpectNearFailurePlacesResultsInTemporaryDirectory) {
   LOG(INFO) << "results: [" << tensorflow::str_util::Join(results, ", ") << "]";
   EXPECT_EQ(3, results.size());
   for (const string& result : results) {
-    LiteralProto literal_proto;
+    Literal literal;
     TF_CHECK_OK(tensorflow::ReadBinaryProto(tensorflow::Env::Default(), result,
-                                            &literal_proto));
-    Literal literal(literal_proto);
+                                            &literal));
     if (result.find("expected") != string::npos) {
-      EXPECT_EQ("2", literal.ToString());
+      EXPECT_EQ("2", LiteralUtil::ToString(literal));
     } else if (result.find("actual") != string::npos) {
-      EXPECT_EQ("4", literal.ToString());
+      EXPECT_EQ("4", LiteralUtil::ToString(literal));
     } else if (result.find("miscompares") != string::npos) {
-      EXPECT_EQ("true", literal.ToString());
+      EXPECT_EQ("true", LiteralUtil::ToString(literal));
     } else {
       FAIL() << "unknown file in temporary directory: " << result;
     }

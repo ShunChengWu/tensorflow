@@ -22,8 +22,6 @@ See the @{$python/nn} guide.
 @@relu6
 @@crelu
 @@elu
-@@leaky_relu
-@@selu
 @@softplus
 @@softsign
 @@dropout

@@ -19,6 +19,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/client/computation_builder.h"
 #include "tensorflow/compiler/xla/client/global_data.h"
 #include "tensorflow/compiler/xla/client/local_client.h"
+#include "tensorflow/compiler/xla/legacy_flags/cpu_compiler_flags.h"
 #include "tensorflow/compiler/xla/tests/client_library_test_base.h"
 #include "tensorflow/compiler/xla/tests/literal_test_util.h"
 #include "tensorflow/compiler/xla/tests/test_macros.h"
@@ -85,12 +86,12 @@ XLA_TEST_F(UnaryOpTest, AbsTestR1Size0) {
   AbsSize0TestHelper<float>();
 }
 
-XLA_TEST_F(UnaryOpTest, AbsTestR1) {
+TEST_F(UnaryOpTest, AbsTestR1) {
   AbsTestHelper<int>();
   AbsTestHelper<float>();
 }
 
-XLA_TEST_F(UnaryOpTest, AbsTestR0) {
+TEST_F(UnaryOpTest, AbsTestR0) {
   ComputationBuilder builder(client_, TestName());
   auto argi = builder.ConstantR0<int>(-5);
   auto absi = builder.Abs(argi);
@@ -104,7 +105,7 @@ XLA_TEST_F(UnaryOpTest, AbsTestR0) {
   ComputeAndCompareR0<float>(&builder, 8.0f, {});
 }
 
-XLA_TEST_F(UnaryOpTest, SignTestR0) {
+TEST_F(UnaryOpTest, SignTestR0) {
   ComputationBuilder builder(client_, TestName());
   auto argi = builder.ConstantR0<int>(-5);
   auto absi = builder.Sign(argi);
@@ -118,17 +119,17 @@ XLA_TEST_F(UnaryOpTest, SignTestR0) {
   ComputeAndCompareR0<float>(&builder, -2.0f, {});
 }
 
-XLA_TEST_F(UnaryOpTest, SignTestR1) {
+TEST_F(UnaryOpTest, SignTestR1) {
   SignTestHelper<int>();
   SignTestHelper<float>();
 }
 
-XLA_TEST_F(UnaryOpTest, SignAbsTestR1) {
+TEST_F(UnaryOpTest, SignAbsTestR1) {
   SignAbsTestHelper<int>();
   SignAbsTestHelper<float>();
 }
 
-XLA_TEST_F(UnaryOpTest, UnsignedAbsTestR1) {
+TEST_F(UnaryOpTest, UnsignedAbsTestR1) {
   ComputationBuilder builder(client_, TestName());
   auto arg = builder.ConstantR1<unsigned int>(
       {2, 25, 0, 123, std::numeric_limits<unsigned int>::max()});
@@ -138,7 +139,7 @@ XLA_TEST_F(UnaryOpTest, UnsignedAbsTestR1) {
       &builder, {2, 25, 0, 123, std::numeric_limits<unsigned int>::max()}, {});
 }
 
-XLA_TEST_F(UnaryOpTest, UnsignedSignTestR1) {
+TEST_F(UnaryOpTest, UnsignedSignTestR1) {
   ComputationBuilder builder(client_, TestName());
   auto arg = builder.ConstantR1<unsigned int>(
       {2, 25, 0, 123, std::numeric_limits<unsigned int>::max()});
@@ -147,7 +148,7 @@ XLA_TEST_F(UnaryOpTest, UnsignedSignTestR1) {
   ComputeAndCompareR1<unsigned int>(&builder, {1, 1, 0, 1, 1}, {});
 }
 
-XLA_TEST_F(UnaryOpTest, SignAbsTestR2) {
+TEST_F(UnaryOpTest, SignAbsTestR2) {
   ComputationBuilder builder(client_, TestName());
   auto arg = builder.ConstantR2<float>({{1.0, -2.0}, {-3.0, 4.0}});
   auto sign = builder.Sign(arg);
@@ -159,3 +160,20 @@ XLA_TEST_F(UnaryOpTest, SignAbsTestR2) {
 
 }  // namespace
 }  // namespace xla
+
+int main(int argc, char** argv) {
+  std::vector<tensorflow::Flag> flag_list;
+  xla::legacy_flags::AppendCpuCompilerFlags(&flag_list);
+  xla::string usage = tensorflow::Flags::Usage(argv[0], flag_list);
+  const bool parse_result = tensorflow::Flags::Parse(&argc, argv, flag_list);
+  if (!parse_result) {
+    LOG(ERROR) << "\n" << usage;
+    return 2;
+  }
+  testing::InitGoogleTest(&argc, argv);
+  if (argc > 1) {
+    LOG(ERROR) << "Unknown argument " << argv[1] << "\n" << usage;
+    return 2;
+  }
+  return RUN_ALL_TESTS();
+}

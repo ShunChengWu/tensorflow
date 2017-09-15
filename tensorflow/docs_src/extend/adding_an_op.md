@@ -155,7 +155,7 @@ REGISTER_KERNEL_BUILDER(Name("ZeroOut").Device(DEVICE_CPU), ZeroOutOp);
 ### Multi-threaded CPU kernels
 
 To write a multi-threaded CPU kernel, the Shard function in
-[`work_sharder.h`](https://www.tensorflow.org/code/tensorflow/core/util/work_sharder.h)
+[`work_sharder.h`](https://www.tensorflow.org/code/tensorflow/core/framework/work_sharder.h)
 can be used. This function shards a computation function across the
 threads configured to be used for intra-op threading (see
 intra_op_parallelism_threads in
@@ -178,7 +178,9 @@ suggested implementation is to:
    file, but the specialization for the GPUDevice is defined in a .cu.cc file,
    since it will be compiled with the CUDA compiler.
 
-Here is an example implementation.
+<!--zippy-->
+
+Expand this to see the example implementation.
 
 ```c++
 // example.h
@@ -305,6 +307,8 @@ template struct ExampleFunctor<GPUDevice, int32>;
 #endif  // GOOGLE_CUDA
 ```
 
+<!--endzippy-->
+
 ## Build the op library
 ### Compile the op using your system compiler (TensorFlow binary installation)
 
@@ -329,7 +333,7 @@ to compile your op into a dynamic library.
 ```bash
 TF_INC=$(python -c 'import tensorflow as tf; print(tf.sysconfig.get_include())')
 
-g++ -std=c++11 -shared zero_out.cc -o zero_out.so -fPIC -I$TF_INC -I$TF_INC/external/nsync/public -O2
+g++ -std=c++11 -shared zero_out.cc -o zero_out.so -fPIC -I $TF_INC -O2
 ```
 
 On Mac OS X, the additional flag "-undefined dynamic_lookup" is required when
@@ -524,7 +528,7 @@ REGISTER\_OP("ZeroOut")
 </code></pre>
 
 (Note that the set of [attribute types](#attr-types) is different from the
-@{tf.DType$tensor types} used for inputs and outputs.)
+@{$dims_types$tensor types} used for inputs and outputs.)
 
 Your kernel can then access this attr in its constructor via the `context`
 parameter:
@@ -599,7 +603,7 @@ define an attr with constraints, you can use the following `<attr-type-expr>`s:
 
 * `{<type1>, <type2>}`: The value is of type `type`, and must be one of
   `<type1>` or `<type2>`, where `<type1>` and `<type2>` are supported
-  @{tf.DType$tensor types}.  You don't specify
+  @{$dims_types#data-types$tensor types}.  You don't specify
   that the type of the attr is `type`. This is implied when you have a list of
   types in `{...}`.  For example, in this case the attr `t` is a type that must
   be an `int32`, a `float`, or a `bool`:
@@ -630,22 +634,6 @@ define an attr with constraints, you can use the following `<attr-type-expr>`s:
     ```python
     tf.number_type(t=tf.int32)  # Valid
     tf.number_type(t=tf.bool)   # Invalid
-    ```
-
-    Lists can be combined with other lists and single types.  The following
-    op allows attr `t` to be any of the numberic types, or the bool type:
-
-    ```c++
-    REGISTER_OP("NumberOrBooleanType")
-        .Attr("t: {numbertype, bool}");
-    ```
-
-    For this op:
-
-    ```python
-    tf.number_or_boolean_type(t=tf.int32)  # Valid
-    tf.number_or_boolean_type(t=tf.bool)   # Valid
-    tf.number_or_boolean_type(t=tf.string) # Invalid
     ```
 
 * `int >= <n>`: The value must be an int whose value is greater than or equal to
@@ -697,8 +685,7 @@ REGISTER_OP("AttrDefaultExampleForAllTypes")
    .Attr("l_int: list(int) = [2, 3, 5, 7]");
 ```
 
-Note in particular that the values of type `type`
-use @{tf.DType$the `DT_*` names for the types}.
+Note in particular that the values of type `type` use @{$dims_types#data-types$the `DT_*` names for the types}.
 
 #### Polymorphism {#polymorphism}
 
@@ -776,7 +763,7 @@ Your op registration now specifies that the input's type must be `float`, or
 >   """
 > ```
 
-<pre class="prettyprint"><code class="lang-cpp">
+<pre><pre class="prettyprint"><code class="lang-cpp">
 \#include "tensorflow/core/framework/op_kernel.h"<br/>
 class ZeroOut<b>Int32</b>Op : public OpKernel {
   // as before
@@ -816,7 +803,7 @@ REGISTER\_KERNEL\_BUILDER(
     .Device(DEVICE\_CPU)
     .TypeConstraint&lt;float&gt;("T"),
     ZeroOutFloatOp);
-</b></code></pre>
+</b></code></pre></pre>
 
 > To preserve [backwards compatibility](#backwards-compatibility), you should
 > specify a [default value](#default-values-constraints) when adding an attr to
@@ -1028,7 +1015,7 @@ expressions:
   `string`). This specifies a single tensor of the given type.
 
   See
-  @{tf.DType$the list of supported Tensor types}.
+  @{$dims_types#data-types$the list of supported Tensor types}.
 
   ```c++
   REGISTER_OP("BuiltInTypesExample")
@@ -1071,7 +1058,7 @@ expressions:
 * For a sequence of tensors with the same type: `<number> * <type>`, where
   `<number>` is the name of an [Attr](#attrs) with type `int`.  The `<type>` can
   either be
-  @{tf.DType$a specific type like `int32` or `float`},
+  @{$dims_types#data-types$a specific type like `int32` or `float`},
   or the name of an attr with type `type`.  As an example of the first, this
   op accepts a list of `int32` tensors:
 
@@ -1113,7 +1100,7 @@ In general, changes to existing, checked-in specifications must be
 backwards-compatible: changing the specification of an op must not break prior
 serialized `GraphDef` protocol buffers constructed from older specifications.
 The details of `GraphDef` compatibility are
-@{$version_compat#compatibility_of_graphs_and_checkpoints$described here}.
+@{$version_semantics#graphs$described here}.
 
 There are several ways to preserve backwards-compatibility.
 
@@ -1163,7 +1150,7 @@ callers.  The Python API may be kept compatible by careful changes in a
 hand-written Python wrapper, by keeping the old signature except possibly adding
 new optional arguments to the end.  Generally incompatible changes may only be
 made when TensorFlow's changes major versions, and must conform to the
-@{$version_compat#compatibility_of_graphs_and_checkpoints$`GraphDef` version semantics}.
+@{$version_semantics#graphs$`GraphDef` version semantics}.
 
 ### GPU Support {#gpu-support}
 
@@ -1214,10 +1201,10 @@ into a single dynamically loadable library:
 
 ```bash
 nvcc -std=c++11 -c -o cuda_op_kernel.cu.o cuda_op_kernel.cu.cc \
--I $TF_INC -I$TF_INC/external/nsync/public -D GOOGLE_CUDA=1 -x cu -Xcompiler -fPIC
+-I $TF_INC -D GOOGLE_CUDA=1 -x cu -Xcompiler -fPIC
 
 g++ -std=c++11 -shared -o cuda_op_kernel.so cuda_op_kernel.cc \
-cuda_op_kernel.cu.o -I $TF_INC -I$TF_INC/external/nsync/public -fPIC -lcudart
+cuda_op_kernel.cu.o -I $TF_INC -fPIC -lcudart
 ```
 
 `cuda_op_kernel.so` produced above can be loaded as usual in Python, using the

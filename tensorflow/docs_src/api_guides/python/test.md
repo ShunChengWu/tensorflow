@@ -23,16 +23,13 @@ which adds methods relevant to TensorFlow tests.  Here is an example:
 ```
 
 `tf.test.TestCase` inherits from `unittest.TestCase` but adds a few additional
-methods.  See @{tf.test.TestCase} for details.
+methods.  We will document these methods soon.
 
 *   @{tf.test.main}
 *   @{tf.test.TestCase}
 *   @{tf.test.test_src_dir_path}
 
 ## Utilities
-
-Note: `tf.test.mock` is an alias to the python `mock` or `unittest.mock`
-depending on the python version.
 
 *   @{tf.test.assert_equal_graph_def}
 *   @{tf.test.get_temp_dir}
